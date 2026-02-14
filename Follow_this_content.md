@@ -47,39 +47,91 @@ Key Features at a Glance:
 
 ### Updated Content:
 ```
-How is this different from any of the other existing ideas?
+Your solution should be able to explain the following:
+
+═══════════════════════════════════════════════════════════
+1. HOW DIFFERENT IS IT FROM ANY OF THE OTHER EXISTING IDEAS?
+═══════════════════════════════════════════════════════════
 
 THE PROBLEM WITH EXISTING APPS:
 
-1. The Literacy Wall:
-   • Current apps like Swachhata are built for the literate elite
-   • Complex text inputs and English/Hindi menus exclude daily wage workers and slum residents
-   • These communities abandon apps immediately - cannot navigate complex forms just to upload a photo
+Existing Apps (like Swachhata):
+• Built for the literate elite, not for people living in underserved communities
+• Demand text inputs and complex forms
+• Accidentally filter out the very people who need it most
 
-2. The Invisible Crisis:
-   • Communities that cannot "log" formal tickets are assumed to be "clean" by administration
-   • City's most dangerous sanitation hotspots remain completely off the municipal radar
-   • No evidence-based reporting leads to ignored complaints
+The Literacy Wall:
+• Daily wage workers and slum residents abandon these apps immediately
+• Cannot navigate complex English or Hindi menus required just to upload a photo
+• Zero accessibility for low-literacy users
 
-3. No Accountability:
-   • Workers can mark tasks "complete" without proof
-   • No verification of actual cleanup
-   • Spam and false reports waste resources
+The Invisible Crisis:
+• Communities that cannot "log" formal tickets are assumed to be "clean"
+• City's most dangerous sanitation hotspots remain completely off the municipal radar
+• No evidence-based reporting leads to ignored complaints
 
-OUR DIFFERENTIATION (USP):
+No Accountability:
+• Workers can mark tasks "complete" without proof
+• No verification of actual cleanup
+• Spam and false reports waste municipal resources
 
-The Triple-Lock Mechanism:
-1. AI Verification → Validates reports and filters spam automatically (95%+ accuracy)
-2. Route Optimization → Executes cleanup efficiently ("Uber for Garbage" - 30% fuel savings)
-3. Epidemic Forecasting → Predicts health risks before outbreaks occur
+═══════════════════════════════════════════════════════════
+2. HOW WILL IT BE ABLE TO SOLVE THE PROBLEM?
+═══════════════════════════════════════════════════════════
 
-Key Differentiators:
+SanitiSense is a "Logistics Engine" - We actively direct trucks to trash and force verification before closing tickets.
+
+Access (Breaking the Literacy Barrier):
+• Voice/Photo-first interface - zero text input required
+• 7 Indian languages (80%+ population coverage)
+• Works offline (critical for poor connectivity areas)
+• 100% accessible to illiterate population
+
+Efficiency (Optimizing Municipal Operations):
+• Optimizes truck routes to save fuel (30% reduction)
+• Clears high-priority hazards first (severity-based prioritization)
+• Dynamic daily route generation using Google OR-Tools
+• 40% reduction in time wasted on inefficient routes
+
+Accountability (Preventing Fraud):
+• "Proof of Cleanliness" - Workers cannot close tickets without "After" photo
+• AI compares Before vs After images (90%+ validation accuracy)
+• Minimum 70% waste reduction required for approval
+• Worker performance tracking and leaderboard
+
+═══════════════════════════════════════════════════════════
+3. USP OF THE PROPOSED SOLUTION
+═══════════════════════════════════════════════════════════
+
+The Triple-Lock Mechanism™:
+
+🔒 LOCK 1: AI Verification
+   → Validates the Report
+   → Filters spam automatically (95%+ accuracy)
+   → Classifies issue type and severity (1-10 scale)
+   → Processes voice notes in 7 languages
+
+🔒 LOCK 2: Route Optimization
+   → Executes the Cleanup
+   → "Uber for Garbage" - dynamic route generation
+   → 30% fuel savings, 40% time savings
+   → Turn-by-turn navigation for workers
+
+🔒 LOCK 3: Epidemic Forecasting
+   → Predicts Health Risks
+   → Correlates garbage accumulation with disease outbreak data
+   → Identifies Dengue, Malaria, Cholera risk zones
+   → Proactive alerts to health officials before outbreaks
+
+KEY DIFFERENTIATORS:
 ✓ Photo-first, voice-enabled (zero-literacy design)
 ✓ Works offline (critical for underserved areas)
-✓ 7 Indian languages (80%+ population coverage)
+✓ 7 Indian languages (Hindi, English, Marathi, Tamil, Telugu, Bengali, Gujarati)
 ✓ Anti-fraud "Proof of Cleanliness" system
 ✓ Closed-loop accountability (not just reporting)
 ✓ Proactive disease prevention (not reactive cleanup)
+✓ Evidence-backed verification (before-after photos)
+✓ Measurable ROI (2-3 month break-even)
 
 "We don't help citizens complain — we help systems understand and act."
 ```
