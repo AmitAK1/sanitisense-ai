@@ -13,11 +13,11 @@ import json
 import random
 import uuid
 from datetime import datetime, timedelta
+from decimal import Decimal
 
-# TODO: uncomment when deploying
-# import boto3
-# dynamodb = boto3.resource('dynamodb', region_name='us-east-1')
-# table = dynamodb.Table('SanitiSense')
+import boto3
+dynamodb = boto3.resource('dynamodb', region_name='us-east-1')
+table = dynamodb.Table('SanitiSense')
 
 # ========== DEMO DATA CONFIGURATION ==========
 MUMBAI_WARDS = [
@@ -132,12 +132,12 @@ def generate_report(index):
         "status": status,
         "ward_number": ward["number"],
         "ward_name": ward["name"],
-        "location": {"lat": round(lat, 6), "lng": round(lng, 6)},
+        "location": {"lat": Decimal(str(round(lat, 6))), "lng": Decimal(str(round(lng, 6)))},
         "image_key": f"citizen-reports/2026/02/{created_at.strftime('%d')}/{report_id}.jpg",
         "created_at": created_at.isoformat() + "Z",
         "updated_at": (created_at + timedelta(hours=random.randint(1, 24))).isoformat() + "Z",
         "citizen_phone": f"+91-{random.randint(7000000000, 9999999999)}",
-        "ai_confidence": round(random.uniform(0.75, 0.98), 2),
+        "ai_confidence": Decimal(str(round(random.uniform(0.75, 0.98), 2))),
         # GSI keys
         "GSI1PK": f"STATUS#{status}",
         "GSI1SK": created_at.isoformat() + "Z"
@@ -154,12 +154,10 @@ def generate_all_seed_data():
 
 def upload_to_dynamodb(reports):
     """Batch write to DynamoDB"""
-    # TODO: uncomment when deploying
-    # with table.batch_writer() as batch:
-    #     for report in reports:
-    #         batch.put_item(Item=report)
-    # print(f"Uploaded {len(reports)} reports to DynamoDB")
-    pass
+    with table.batch_writer() as batch:
+        for report in reports:
+            batch.put_item(Item=report)
+    print(f"Uploaded {len(reports)} reports to DynamoDB")
 
 
 if __name__ == "__main__":
@@ -188,6 +186,5 @@ if __name__ == "__main__":
     print(f"\nSaved to seed_data_output.json")
     
     # Upload to DynamoDB
-    # TODO: uncomment when ready to deploy
-    # upload_to_dynamodb(reports)
-    # print("Uploaded to DynamoDB!")
+    upload_to_dynamodb(reports)
+    print("Uploaded to DynamoDB!")

@@ -8,14 +8,13 @@ import json
 import base64
 import os
 
-# TODO: uncomment when deploying to AWS
-# import boto3
-# bedrock = boto3.client('bedrock-runtime', region_name=os.environ.get('AWS_REGION', 'us-east-1'))
-# rekognition = boto3.client('rekognition', region_name=os.environ.get('AWS_REGION', 'us-east-1'))
-# s3 = boto3.client('s3', region_name=os.environ.get('AWS_REGION', 'us-east-1'))
+import boto3
+bedrock = boto3.client('bedrock-runtime', region_name=os.environ.get('AWS_REGION', 'us-east-1'))
+rekognition = boto3.client('rekognition', region_name=os.environ.get('AWS_REGION', 'us-east-1'))
+s3 = boto3.client('s3', region_name=os.environ.get('AWS_REGION', 'us-east-1'))
 
 S3_BUCKET = os.environ.get('S3_BUCKET', 'sanitisense-media')
-BEDROCK_MODEL_ID = os.environ.get('BEDROCK_MODEL_ID', 'anthropic.claude-3-sonnet-20240229-v1:0')
+BEDROCK_MODEL_ID = os.environ.get('BEDROCK_MODEL_ID', 'us.anthropic.claude-sonnet-4-20250514-v1:0')
 
 # ========== BEDROCK PROMPT ==========
 CLASSIFICATION_PROMPT = """Analyze this photo taken by a citizen reporting a sanitation issue in an Indian city.
@@ -42,12 +41,8 @@ Return ONLY the JSON object, no other text."""
 
 def get_image_from_s3(image_key):
     """Download image from S3 and return bytes"""
-    # TODO: uncomment when deploying
-    # response = s3.get_object(Bucket=S3_BUCKET, Key=image_key)
-    # return response['Body'].read()
-    
-    # Mock: return empty bytes for local testing
-    return b""
+    response = s3.get_object(Bucket=S3_BUCKET, Key=image_key)
+    return response['Body'].read()
 
 
 def analyze_with_bedrock(image_bytes):
@@ -81,24 +76,13 @@ def analyze_with_bedrock(image_bytes):
         ]
     }
 
-    # TODO: uncomment when deploying
-    # response = bedrock.invoke_model(
-    #     modelId=BEDROCK_MODEL_ID,
-    #     contentType='application/json',
-    #     body=json.dumps(request_body)
-    # )
-    # result = json.loads(response['body'].read())
-    # return json.loads(result['content'][0]['text'])
-
-    # Mock response for local testing
-    return {
-        "is_spam": False,
-        "category": "garbage_pile",
-        "severity_score": 7,
-        "description": "Moderate garbage accumulation near residential area with mixed waste including plastic bags and organic materials.",
-        "health_risk": "medium",
-        "confidence": 0.91
-    }
+    response = bedrock.invoke_model(
+        modelId=BEDROCK_MODEL_ID,
+        contentType='application/json',
+        body=json.dumps(request_body)
+    )
+    result = json.loads(response['body'].read())
+    return json.loads(result['content'][0]['text'])
 
 
 def analyze_with_rekognition(image_bytes):
@@ -106,21 +90,12 @@ def analyze_with_rekognition(image_bytes):
     Call Amazon Rekognition DetectLabels for supplementary object labels.
     Returns list of detected labels with confidence scores.
     """
-    # TODO: uncomment when deploying
-    # response = rekognition.detect_labels(
-    #     Image={'Bytes': image_bytes},
-    #     MaxLabels=10,
-    #     MinConfidence=70
-    # )
-    # return [{"name": l['Name'], "confidence": l['Confidence']} for l in response['Labels']]
-
-    # Mock response for local testing
-    return [
-        {"name": "Garbage", "confidence": 94.2},
-        {"name": "Plastic", "confidence": 88.5},
-        {"name": "Street", "confidence": 82.1},
-        {"name": "Urban", "confidence": 79.3}
-    ]
+    response = rekognition.detect_labels(
+        Image={'Bytes': image_bytes},
+        MaxLabels=10,
+        MinConfidence=70
+    )
+    return [{"name": l['Name'], "confidence": l['Confidence']} for l in response['Labels']]
 
 
 def handler(event, context):

@@ -15,9 +15,9 @@ Globals:
     Runtime: python3.12
     Environment:
       Variables:
-        TABLE_NAME: !Ref SanitiSenseTable
-        S3_BUCKET: !Ref MediaBucket
-        BEDROCK_MODEL_ID: anthropic.claude-3-sonnet-20240229-v1:0
+        TABLE_NAME: SanitiSense
+        S3_BUCKET: sanitisense-media-982253889131
+        BEDROCK_MODEL_ID: us.anthropic.claude-sonnet-4-20250514-v1:0
         KNOWLEDGE_BASE_ID: YOUR_KB_ID  # TODO: replace after creating KB
 
 Resources:
@@ -47,9 +47,9 @@ Resources:
             Method: post
       Policies:
         - DynamoDBCrudPolicy:
-            TableName: !Ref SanitiSenseTable
+            TableName: SanitiSense
         - S3CrudPolicy:
-            BucketName: !Ref MediaBucket
+            BucketName: sanitisense-media-982253889131
 
   ImageAnalyzerFunction:
     Type: AWS::Serverless::Function
@@ -67,9 +67,9 @@ Resources:
             Method: post
       Policies:
         - DynamoDBCrudPolicy:
-            TableName: !Ref SanitiSenseTable
+            TableName: SanitiSense
         - S3ReadPolicy:
-            BucketName: !Ref MediaBucket
+            BucketName: sanitisense-media-982253889131
         - Statement:
             - Effect: Allow
               Action:
@@ -113,7 +113,7 @@ Resources:
             Method: get
       Policies:
         - DynamoDBCrudPolicy:
-            TableName: !Ref SanitiSenseTable
+            TableName: SanitiSense
 
   ValidationFunction:
     Type: AWS::Serverless::Function
@@ -131,9 +131,9 @@ Resources:
             Method: post
       Policies:
         - DynamoDBCrudPolicy:
-            TableName: !Ref SanitiSenseTable
+            TableName: SanitiSense
         - S3ReadPolicy:
-            BucketName: !Ref MediaBucket
+            BucketName: sanitisense-media-982253889131
         - Statement:
             - Effect: Allow
               Action:
@@ -161,7 +161,7 @@ Resources:
             Method: get
       Policies:
         - DynamoDBCrudPolicy:
-            TableName: !Ref SanitiSenseTable
+            TableName: SanitiSense
         - Statement:
             - Effect: Allow
               Action:
@@ -214,69 +214,15 @@ Resources:
             Method: get
       Policies:
         - DynamoDBCrudPolicy:
-            TableName: !Ref SanitiSenseTable
+            TableName: SanitiSense
 
-  # ========== DYNAMODB ==========
-  SanitiSenseTable:
-    Type: AWS::DynamoDB::Table
-    Properties:
-      TableName: SanitiSense
-      BillingMode: PAY_PER_REQUEST
-      AttributeDefinitions:
-        - AttributeName: PK
-          AttributeType: S
-        - AttributeName: SK
-          AttributeType: S
-        - AttributeName: GSI1PK
-          AttributeType: S
-        - AttributeName: GSI1SK
-          AttributeType: S
-      KeySchema:
-        - AttributeName: PK
-          KeyType: HASH
-        - AttributeName: SK
-          KeyType: RANGE
-      GlobalSecondaryIndexes:
-        - IndexName: GSI1
-          KeySchema:
-            - AttributeName: GSI1PK
-              KeyType: HASH
-            - AttributeName: GSI1SK
-              KeyType: RANGE
-          Projection:
-            ProjectionType: ALL
-
-  # ========== S3 BUCKETS ==========
-  MediaBucket:
-    Type: AWS::S3::Bucket
-    Properties:
-      BucketName: !Sub 'sanitisense-media-${AWS::AccountId}'
-      CorsConfiguration:
-        CorsRules:
-          - AllowedHeaders: ['*']
-            AllowedMethods: [GET, PUT, POST]
-            AllowedOrigins: ['*']
-            MaxAge: 3600
-
-  KnowledgeBucket:
-    Type: AWS::S3::Bucket
-    Properties:
-      BucketName: !Sub 'sanitisense-knowledge-${AWS::AccountId}'
+# NOTE: DynamoDB table and S3 buckets were created manually:
+#   - DynamoDB: SanitiSense (PK/SK + GSI1)
+#   - S3: sanitisense-media-982253889131
+#   - S3: sanitisense-knowledge-982253889131
 
 # ========== OUTPUTS ==========
 Outputs:
   ApiUrl:
     Description: API Gateway endpoint URL
     Value: !Sub 'https://${SanitiSenseApi}.execute-api.${AWS::Region}.amazonaws.com/prod'
-  
-  TableName:
-    Description: DynamoDB table name
-    Value: !Ref SanitiSenseTable
-  
-  MediaBucketName:
-    Description: S3 Media bucket name
-    Value: !Ref MediaBucket
-  
-  KnowledgeBucketName:
-    Description: S3 Knowledge Base bucket name
-    Value: !Ref KnowledgeBucket

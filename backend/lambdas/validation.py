@@ -8,14 +8,13 @@ import json
 import base64
 import os
 
-# TODO: uncomment when deploying to AWS
-# import boto3
-# bedrock = boto3.client('bedrock-runtime', region_name=os.environ.get('AWS_REGION', 'us-east-1'))
-# s3 = boto3.client('s3', region_name=os.environ.get('AWS_REGION', 'us-east-1'))
-# dynamodb = boto3.resource('dynamodb', region_name=os.environ.get('AWS_REGION', 'us-east-1'))
-# table = dynamodb.Table(os.environ.get('TABLE_NAME', 'SanitiSense'))
+import boto3
+bedrock = boto3.client('bedrock-runtime', region_name=os.environ.get('AWS_REGION', 'us-east-1'))
+s3 = boto3.client('s3', region_name=os.environ.get('AWS_REGION', 'us-east-1'))
+dynamodb = boto3.resource('dynamodb', region_name=os.environ.get('AWS_REGION', 'us-east-1'))
+table = dynamodb.Table(os.environ.get('TABLE_NAME', 'SanitiSense'))
 
-BEDROCK_MODEL_ID = os.environ.get('BEDROCK_MODEL_ID', 'anthropic.claude-3-sonnet-20240229-v1:0')
+BEDROCK_MODEL_ID = os.environ.get('BEDROCK_MODEL_ID', 'us.anthropic.claude-sonnet-4-20250514-v1:0')
 S3_BUCKET = os.environ.get('S3_BUCKET', 'sanitisense-media')
 
 # ========== BEDROCK VALIDATION PROMPT ==========
@@ -51,10 +50,8 @@ Return ONLY the JSON object, no other text."""
 
 def get_image_bytes(image_key):
     """Download image from S3"""
-    # TODO: uncomment when deploying
-    # response = s3.get_object(Bucket=S3_BUCKET, Key=image_key)
-    # return response['Body'].read()
-    return b""
+    response = s3.get_object(Bucket=S3_BUCKET, Key=image_key)
+    return response['Body'].read()
 
 
 def validate_with_bedrock(before_bytes, after_bytes):
@@ -97,25 +94,13 @@ def validate_with_bedrock(before_bytes, after_bytes):
         ]
     }
 
-    # TODO: uncomment when deploying
-    # response = bedrock.invoke_model(
-    #     modelId=BEDROCK_MODEL_ID,
-    #     contentType='application/json',
-    #     body=json.dumps(request_body)
-    # )
-    # result = json.loads(response['body'].read())
-    # return json.loads(result['content'][0]['text'])
-
-    # Mock response for local testing
-    return {
-        "is_resolved": True,
-        "resolution_quality": "good",
-        "resolution_score": 8,
-        "same_location": True,
-        "observations": "The garbage pile visible in the before photo has been largely cleared. The area shows significant improvement with debris removed and ground swept.",
-        "issues_remaining": "Minor dust and staining on the ground surface that may need power washing.",
-        "confidence": 0.87
-    }
+    response = bedrock.invoke_model(
+        modelId=BEDROCK_MODEL_ID,
+        contentType='application/json',
+        body=json.dumps(request_body)
+    )
+    result = json.loads(response['body'].read())
+    return json.loads(result['content'][0]['text'])
 
 
 def handler(event, context):
@@ -157,20 +142,19 @@ def handler(event, context):
             new_status = 'rejected'
 
         # Step 4: Update task in DynamoDB
-        # TODO: uncomment when deploying
-        # from datetime import datetime
-        # now = datetime.utcnow().isoformat() + 'Z'
-        # table.update_item(
-        #     Key={'PK': f'TASK#{task_id}', 'SK': 'META'},
-        #     UpdateExpression='SET #s = :s, validation = :v, updated_at = :t, GSI1PK = :gsi',
-        #     ExpressionAttributeNames={'#s': 'status'},
-        #     ExpressionAttributeValues={
-        #         ':s': new_status,
-        #         ':v': validation,
-        #         ':t': now,
-        #         ':gsi': f'STATUS#{new_status}'
-        #     }
-        # )
+        from datetime import datetime
+        now = datetime.utcnow().isoformat() + 'Z'
+        table.update_item(
+            Key={'PK': f'TASK#{task_id}', 'SK': 'META'},
+            UpdateExpression='SET #s = :s, validation = :v, updated_at = :t, GSI1PK = :gsi',
+            ExpressionAttributeNames={'#s': 'status'},
+            ExpressionAttributeValues={
+                ':s': new_status,
+                ':v': validation,
+                ':t': now,
+                ':gsi': f'STATUS#{new_status}'
+            }
+        )
 
         result = {
             "task_id": task_id,

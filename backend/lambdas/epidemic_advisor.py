@@ -8,14 +8,13 @@ import json
 import os
 from datetime import datetime
 
-# TODO: uncomment when deploying to AWS
-# import boto3
-# bedrock_agent = boto3.client('bedrock-agent-runtime', region_name=os.environ.get('AWS_REGION', 'us-east-1'))
-# dynamodb = boto3.resource('dynamodb', region_name=os.environ.get('AWS_REGION', 'us-east-1'))
-# table = dynamodb.Table(os.environ.get('TABLE_NAME', 'SanitiSense'))
+import boto3
+bedrock_agent = boto3.client('bedrock-agent-runtime', region_name=os.environ.get('AWS_REGION', 'us-east-1'))
+dynamodb = boto3.resource('dynamodb', region_name=os.environ.get('AWS_REGION', 'us-east-1'))
+table = dynamodb.Table(os.environ.get('TABLE_NAME', 'SanitiSense'))
 
 KNOWLEDGE_BASE_ID = os.environ.get('KNOWLEDGE_BASE_ID', 'YOUR_KB_ID')
-BEDROCK_MODEL_ID = os.environ.get('BEDROCK_MODEL_ID', 'anthropic.claude-3-sonnet-20240229-v1:0')
+BEDROCK_MODEL_ID = os.environ.get('BEDROCK_MODEL_ID', 'us.anthropic.claude-sonnet-4-20250514-v1:0')
 
 # ========== RAG QUERY TEMPLATE ==========
 RAG_QUERY_TEMPLATE = """Based on the following sanitation data from Ward {ward_number} in the city:
@@ -40,24 +39,35 @@ def get_ward_stats(ward_number):
     Aggregate sanitation stats for a ward from DynamoDB.
     In production, this queries the GSI for recent reports in the ward.
     """
-    # TODO: uncomment when deploying
-    # response = table.query(
-    #     KeyConditionExpression='PK = :pk AND begins_with(SK, :sk)',
-    #     ExpressionAttributeValues={
-    #         ':pk': f'WARD#{ward_number}',
-    #         ':sk': 'REPORT#'
-    #     }
-    # )
-    # items = response['Items']
-    # ... aggregate stats ...
+    response = table.query(
+        KeyConditionExpression='PK = :pk AND begins_with(SK, :sk)',
+        ExpressionAttributeValues={
+            ':pk': f'WARD#{ward_number}',
+            ':sk': 'REPORT#'
+        }
+    )
+    items = response['Items']
 
-    # Mock stats for local testing
+    # Aggregate stats from query results
+    categories = {}
+    total_severity = 0
+    stagnant_water_count = 0
+    for item in items:
+        cat = item.get('category', 'other')
+        categories[cat] = categories.get(cat, 0) + 1
+        total_severity += item.get('severity_score', 0)
+        if cat == 'stagnant_water':
+            stagnant_water_count += 1
+
+    top_categories = ', '.join(f"{k} ({v})" for k, v in sorted(categories.items(), key=lambda x: -x[1])[:5])
+    avg_severity = round(total_severity / len(items), 1) if items else 0
+
     return {
         "ward_number": ward_number,
-        "open_reports": 23,
-        "top_categories": "stagnant_water (8), garbage_pile (7), blocked_sewer (5)",
-        "avg_severity": 6.2,
-        "stagnant_water_count": 8,
+        "open_reports": len(items),
+        "top_categories": top_categories,
+        "avg_severity": avg_severity,
+        "stagnant_water_count": stagnant_water_count,
         "season": "monsoon"
     }
 
@@ -72,68 +82,30 @@ def query_knowledge_base(query_text):
     - Dengue/Malaria/Cholera prevention protocols
     - Municipal sanitation best practices
     """
-    # TODO: uncomment when deploying
-    # response = bedrock_agent.retrieve_and_generate(
-    #     input={'text': query_text},
-    #     retrieveAndGenerateConfiguration={
-    #         'type': 'KNOWLEDGE_BASE',
-    #         'knowledgeBaseConfiguration': {
-    #             'knowledgeBaseId': KNOWLEDGE_BASE_ID,
-    #             'modelArn': f'arn:aws:bedrock:us-east-1::foundation-model/{BEDROCK_MODEL_ID}',
-    #             'retrievalConfiguration': {
-    #                 'vectorSearchConfiguration': {
-    #                     'numberOfResults': 5
-    #                 }
-    #             }
-    #         }
-    #     }
-    # )
-    # return {
-    #     'text': response['output']['text'],
-    #     'citations': [
-    #         {
-    #             'text': c['generatedResponsePart']['textResponsePart']['text'],
-    #             'source': c['retrievedReferences'][0]['location']['s3Location']['uri']
-    #         }
-    #         for c in response.get('citations', [])
-    #         if c.get('retrievedReferences')
-    #     ]
-    # }
-
-    # Mock response for local testing
-    return {
-        "text": """## Epidemic Risk Assessment — Ward 42
-
-**Risk Level: HIGH**
-
-Based on the current sanitation data showing 8 stagnant water reports and 23 open issues during monsoon season, this ward faces elevated risk for:
-
-### Disease Risks
-1. **Dengue Fever** (High Risk) — 8 stagnant water sites are potential Aedes mosquito breeding grounds. WHO guidelines indicate that stagnant water collections during monsoon season create ideal conditions for dengue transmission.
-2. **Malaria** (Medium Risk) — Blocked sewers and stagnant water increase Anopheles mosquito breeding potential.
-3. **Leptospirosis** (Medium Risk) — Garbage accumulation near waterlogged areas increases rodent activity and contaminated water exposure.
-4. **Gastroenteritis** (Medium Risk) — Blocked sewers and garbage near food preparation areas increase fecal-oral transmission risk.
-
-### Recommended Municipal Actions
-1. **Immediate**: Clear all 8 stagnant water sites within 24 hours
-2. **Priority**: Deploy fogging teams in the ward within 48 hours
-3. **Ongoing**: Increase garbage collection frequency to twice daily
-4. **Monitoring**: Set up sentinel surveillance at the nearest PHC
-
-### Citizen Advisory
-- Use mosquito nets and repellents
-- Do not store water in open containers
-- Report any fever lasting more than 2 days to the nearest health center
-- Avoid walking through waterlogged areas""",
-        "citations": [
-            {
-                "text": "Stagnant water collections are primary breeding sites for Aedes mosquitoes",
-                "source": "s3://sanitisense-knowledge/who-wash-guidelines-2024.pdf"
-            },
-            {
-                "text": "Monsoon season in tropical cities shows 3-5x increase in vector-borne diseases",
-                "source": "s3://sanitisense-knowledge/india-disease-surveillance-2025.pdf"
+    response = bedrock_agent.retrieve_and_generate(
+        input={'text': query_text},
+        retrieveAndGenerateConfiguration={
+            'type': 'KNOWLEDGE_BASE',
+            'knowledgeBaseConfiguration': {
+                'knowledgeBaseId': KNOWLEDGE_BASE_ID,
+                'modelArn': f'arn:aws:bedrock:us-east-1::foundation-model/{BEDROCK_MODEL_ID}',
+                'retrievalConfiguration': {
+                    'vectorSearchConfiguration': {
+                        'numberOfResults': 5
+                    }
+                }
             }
+        }
+    )
+    return {
+        'text': response['output']['text'],
+        'citations': [
+            {
+                'text': c['generatedResponsePart']['textResponsePart']['text'],
+                'source': c['retrievedReferences'][0]['location']['s3Location']['uri']
+            }
+            for c in response.get('citations', [])
+            if c.get('retrievedReferences')
         ]
     }
 

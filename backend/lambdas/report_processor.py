@@ -9,10 +9,9 @@ import uuid
 import os
 from datetime import datetime
 
-# TODO: uncomment when deploying to AWS
-# import boto3
-# dynamodb = boto3.resource('dynamodb', region_name=os.environ.get('AWS_REGION', 'us-east-1'))
-# table = dynamodb.Table(os.environ.get('DYNAMODB_TABLE', 'sanitisense-main'))
+import boto3
+dynamodb = boto3.resource('dynamodb', region_name=os.environ.get('AWS_REGION', 'us-east-1'))
+table = dynamodb.Table(os.environ.get('DYNAMODB_TABLE', 'sanitisense-main'))
 
 
 def generate_ticket_id():
@@ -72,8 +71,7 @@ def handler(event, context):
             "created_at": datetime.utcnow().isoformat() + "Z",
         }
 
-        # TODO: Save to DynamoDB
-        # table.put_item(Item=report)
+        table.put_item(Item=report)
 
         return {
             "statusCode": 201,

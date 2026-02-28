@@ -86,7 +86,7 @@ def analyze_image(image_bytes):
     image_b64 = base64.b64encode(image_bytes).decode('utf-8')
     
     response = bedrock.invoke_model(
-        modelId='anthropic.claude-3-sonnet-20240229-v1:0',
+        modelId='us.anthropic.claude-sonnet-4-20250514-v1:0',
         contentType='application/json',
         body=json.dumps({
             "anthropic_version": "bedrock-2023-05-31",
@@ -162,7 +162,7 @@ Rules: approved = >=70% reduction, partial = 40-69%, rejected = <40% or suspicio
 ```
 S3_BUCKET=sanitisense-media
 DYNAMODB_TABLE=sanitisense-main
-BEDROCK_MODEL_ID=anthropic.claude-3-sonnet-20240229-v1:0
+BEDROCK_MODEL_ID=us.anthropic.claude-sonnet-4-20250514-v1:0
 AWS_REGION=us-east-1
 ```
 

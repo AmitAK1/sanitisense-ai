@@ -307,7 +307,7 @@ SanitiSense AI follows a **microservices architecture** with three primary layer
 ```python
 # Image Analysis (Vision)
 bedrock.invoke_model(
-    modelId="anthropic.claude-3-sonnet-20240229-v1:0",
+    modelId="us.anthropic.claude-sonnet-4-20250514-v1:0",
     body={
         "messages": [{
             "role": "user",

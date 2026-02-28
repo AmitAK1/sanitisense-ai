@@ -2,11 +2,13 @@
 
 ## 📋 Day 1 Priority: Get AWS Resources Running
 
-### Step 1: Enable Bedrock Model Access (DO THIS FIRST!)
-1. Go to AWS Console → Amazon Bedrock → Model access
-2. Click "Manage model access"
-3. Enable: **Anthropic Claude 3 Sonnet** + **Amazon Titan Text Embeddings V2**
-4. Wait for approval (usually instant for hackathon accounts)
+### Step 1: Verify Bedrock Model Access (DO THIS FIRST!)
+Bedrock models are now auto-enabled — no manual activation needed.
+Just verify it works by going to:
+1. AWS Console → Amazon Bedrock → Model catalog → Claude 3 Sonnet → Open in Playground
+2. Send a test message like "Hello" — if it responds, you're good!
+3. For Anthropic models: first-time users may need to submit use case details (one-time)
+4. Models needed: **Claude 3 Sonnet** (image+text) + **Titan Text Embeddings V2** (RAG)
 
 ### Step 2: Create DynamoDB Table
 ```bash
