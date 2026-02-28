@@ -107,6 +107,18 @@ export interface Task {
   assigned_worker_id: string | null;
   created_at: string;
   updated_at: string;
+  // Extra fields from backend (may or may not be present)
+  image_key?: string;
+  health_risk?: string;
+  location?: { lat: string; lng: string };
+  ward_name?: string;
+}
+
+export interface UploadUrlResponse {
+  upload_url: string;
+  image_key: string;
+  expires_in_seconds: number;
+  bucket: string;
 }
 
 // ==================== API FUNCTIONS ====================
@@ -141,15 +153,76 @@ export const submitReport = (data: ReportSubmission) =>
     body: JSON.stringify(data),
   });
 
-// Tasks
-export const fetchTasks = (status = 'pending') => apiFetch<Task[]>(`/tasks?status=${status}`);
+// Tasks — backend wraps response in {tasks: [...], count: N}
+export const fetchTasks = async (status = 'pending'): Promise<Task[]> => {
+  const res = await apiFetch<{ tasks: Record<string, unknown>[]; count: number }>(`/tasks?status=${status}`);
+  return (res.tasks || []).map(normalizeTask);
+};
 export const updateTask = (taskId: string, data: { status: string; notes?: string }) =>
   apiFetch<{ task_id: string; status: string }>(`/tasks/${taskId}`, {
     method: 'PUT',
     body: JSON.stringify(data),
   });
-export const fetchWorkerTasks = (workerId: string) =>
-  apiFetch<Task[]>(`/worker/${workerId}/tasks`);
+export const fetchWorkerTasks = async (workerId: string): Promise<Task[]> => {
+  const res = await apiFetch<{ tasks: Record<string, unknown>[]; count: number }>(`/worker/${workerId}/tasks`);
+  return (res.tasks || []).map(normalizeTask);
+};
+
+// S3 Upload — get presigned URL then PUT file directly
+export const fetchUploadUrl = (filename: string, contentType = 'image/jpeg', type = 'citizen') =>
+  apiFetch<UploadUrlResponse>(
+    `/upload-url?filename=${encodeURIComponent(filename)}&content_type=${encodeURIComponent(contentType)}&type=${type}`
+  );
+
+export async function uploadImageToS3(file: File, type = 'citizen'): Promise<string> {
+  // Step 1: Get presigned URL from backend
+  const contentType = file.type || 'image/jpeg';
+  const { upload_url, image_key } = await fetchUploadUrl(file.name, contentType, type);
+
+  // Step 2: PUT file directly to S3 using presigned URL
+  const uploadRes = await fetch(upload_url, {
+    method: 'PUT',
+    body: file,
+    headers: { 'Content-Type': contentType },
+  });
+  if (!uploadRes.ok) {
+    throw new Error(`S3 upload failed: ${uploadRes.status}`);
+  }
+
+  // Step 3: Return the S3 key for POST /reports
+  return image_key;
+}
+
+/** Normalize a task from DynamoDB (seeded data may lack some fields) */
+function normalizeTask(raw: Record<string, unknown>): Task {
+  const severity = Number(raw.severity_score) || 0;
+  // Derive priority from severity if missing
+  let priority = raw.priority as string;
+  let sla_hours = Number(raw.sla_hours) || 0;
+  if (!priority) {
+    if (severity >= 8) { priority = 'critical'; sla_hours = 4; }
+    else if (severity >= 6) { priority = 'high'; sla_hours = 12; }
+    else if (severity >= 4) { priority = 'medium'; sla_hours = 24; }
+    else { priority = 'low'; sla_hours = 48; }
+  }
+  return {
+    task_id: (raw.task_id || '') as string,
+    report_id: (raw.report_id || raw.report_ticket || '') as string,
+    status: (raw.status || 'pending') as string,
+    priority,
+    sla_hours,
+    category: (raw.category || 'other') as string,
+    severity_score: severity,
+    description: (raw.description || '') as string,
+    ward_number: Number(raw.ward_number) || 0,
+    assigned_worker_id: (raw.assigned_worker_id as string) || null,
+    created_at: (raw.created_at || '') as string,
+    updated_at: (raw.updated_at || '') as string,
+    image_key: (raw.image_key || '') as string,
+    health_risk: (raw.health_risk || '') as string,
+    ward_name: (raw.ward_name || '') as string,
+  };
+}
 
 // Validation
 export const validateCompletion = (data: {

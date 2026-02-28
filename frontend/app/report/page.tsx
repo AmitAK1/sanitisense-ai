@@ -13,7 +13,7 @@ import {
   Send,
   Shield,
 } from 'lucide-react';
-import { submitReport, getS3UploadKey, CATEGORY_LABELS } from '@/lib/api';
+import { submitReport, uploadImageToS3, CATEGORY_LABELS } from '@/lib/api';
 
 type Step = 'photo' | 'location' | 'review' | 'result';
 
@@ -111,7 +111,10 @@ export default function ReportPage() {
     setLoading(true);
     setError('');
     try {
-      const imageKey = getS3UploadKey(imageFile.name);
+      // Step 1: Upload image to S3 via presigned URL
+      const imageKey = await uploadImageToS3(imageFile, 'citizen');
+
+      // Step 2: Submit report with the real S3 key
       const res = await submitReport({
         image_key: imageKey,
         latitude: location.latitude,
