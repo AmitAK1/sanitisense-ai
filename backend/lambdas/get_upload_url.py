@@ -25,17 +25,21 @@ S3_BUCKET = os.environ.get('S3_BUCKET', 'sanitisense-media-982253889131')
 s3_client = boto3.client('s3', region_name=os.environ.get('AWS_REGION', 'us-east-1'))
 
 # File extensions we accept. Anything else gets treated as .jpg for safety.
-ALLOWED_EXTENSIONS = {'jpg', 'jpeg', 'png', 'webp', 'heic', 'heif'}
+ALLOWED_IMAGE_EXTENSIONS = {'jpg', 'jpeg', 'png', 'webp', 'heic', 'heif'}
+ALLOWED_AUDIO_EXTENSIONS = {'webm', 'mp3', 'ogg', 'wav', 'm4a'}
+ALLOWED_EXTENSIONS = ALLOWED_IMAGE_EXTENSIONS | ALLOWED_AUDIO_EXTENSIONS
 
 
 def generate_image_key(filename: str, upload_type: str = 'citizen') -> str:
     """
-    Build the S3 key (path) where the image will live.
+    Build the S3 key (path) where the file will live.
     
-    Citizen photos → citizen-reports/YYYY/MM/DD/<8-char-uuid>.<ext>
-    Worker after-photos → worker-completions/YYYY/MM/DD/<8-char-uuid>.<ext>
+    Citizen photos  → citizen-reports/YYYY/MM/DD/<8-char-uuid>.<ext>
+    Worker photos   → worker-completions/YYYY/MM/DD/<8-char-uuid>.<ext>
+    Voice notes     → voice-notes/YYYY/MM/DD/<8-char-uuid>.<ext>
 
     Example: citizen-reports/2026/02/28/a3f8bb2c.jpg
+    Example: voice-notes/2026/03/01/b7e2c1a9.webm
     """
     # Get file extension, default to jpg if not allowed
     ext = filename.rsplit('.', 1)[-1].lower() if '.' in filename else 'jpg'
@@ -44,7 +48,14 @@ def generate_image_key(filename: str, upload_type: str = 'citizen') -> str:
 
     now = datetime.utcnow()
     unique_id = uuid.uuid4().hex[:8]
-    folder = 'worker-completions' if upload_type == 'worker' else 'citizen-reports'
+
+    # Determine folder based on upload type and file type
+    if upload_type == 'voice' or ext in ALLOWED_AUDIO_EXTENSIONS:
+        folder = 'voice-notes'
+    elif upload_type == 'worker':
+        folder = 'worker-completions'
+    else:
+        folder = 'citizen-reports'
     return f"{folder}/{now.strftime('%Y/%m/%d')}/{unique_id}.{ext}"
 
 

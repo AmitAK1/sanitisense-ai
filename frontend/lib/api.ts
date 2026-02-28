@@ -193,6 +193,24 @@ export async function uploadImageToS3(file: File, type = 'citizen'): Promise<str
   return image_key;
 }
 
+/** Upload an audio blob (voice note) to S3 and return the key */
+export async function uploadAudioToS3(blob: Blob): Promise<string> {
+  const contentType = blob.type || 'audio/webm';
+  const ext = contentType.includes('mp3') ? 'mp3' : contentType.includes('ogg') ? 'ogg' : 'webm';
+  const filename = `voice-note.${ext}`;
+  const { upload_url, image_key } = await fetchUploadUrl(filename, contentType, 'voice');
+
+  const uploadRes = await fetch(upload_url, {
+    method: 'PUT',
+    body: blob,
+    headers: { 'Content-Type': contentType },
+  });
+  if (!uploadRes.ok) {
+    throw new Error(`S3 voice upload failed: ${uploadRes.status}`);
+  }
+  return image_key;
+}
+
 /** Normalize a task from DynamoDB (seeded data may lack some fields) */
 function normalizeTask(raw: Record<string, unknown>): Task {
   const severity = Number(raw.severity_score) || 0;

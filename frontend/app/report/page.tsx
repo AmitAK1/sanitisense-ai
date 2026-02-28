@@ -12,8 +12,11 @@ import {
   X,
   Send,
   Shield,
+  Mic,
+  FileText,
 } from 'lucide-react';
-import { submitReport, uploadImageToS3, CATEGORY_LABELS } from '@/lib/api';
+import { submitReport, uploadImageToS3, uploadAudioToS3, CATEGORY_LABELS } from '@/lib/api';
+import VoiceRecorder from '@/app/components/VoiceRecorder';
 
 type Step = 'photo' | 'location' | 'review' | 'result';
 
@@ -43,6 +46,8 @@ export default function ReportPage() {
   } | null>(null);
   const [error, setError] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
+  const [voiceTranscript, setVoiceTranscript] = useState('');
 
   // Handle image selection
   const handleImageSelect = useCallback((file: File) => {
@@ -114,11 +119,18 @@ export default function ReportPage() {
       // Step 1: Upload image to S3 via presigned URL
       const imageKey = await uploadImageToS3(imageFile, 'citizen');
 
-      // Step 2: Submit report with the real S3 key
+      // Step 2: Upload voice note to S3 if recorded
+      let voiceKey: string | undefined;
+      if (audioBlob) {
+        voiceKey = await uploadAudioToS3(audioBlob);
+      }
+
+      // Step 3: Submit report with the real S3 keys
       const res = await submitReport({
         image_key: imageKey,
         latitude: location.latitude,
         longitude: location.longitude,
+        ...(voiceKey && { voice_key: voiceKey }),
       });
       setResult(res);
       setStep('result');
@@ -139,6 +151,8 @@ export default function ReportPage() {
     setDescription('');
     setResult(null);
     setError('');
+    setAudioBlob(null);
+    setVoiceTranscript('');
   };
 
   // Severity badge
@@ -315,10 +329,30 @@ export default function ReportPage() {
               </div>
             )}
 
-            {/* Optional description */}
+            {/* Voice recorder */}
             <div className="mt-6">
+              <VoiceRecorder
+                transcript={voiceTranscript}
+                onTranscript={(text) => {
+                  setVoiceTranscript(text);
+                  setDescription(text);
+                }}
+                onAudioReady={(blob) => setAudioBlob(blob)}
+              />
+            </div>
+
+            {/* Optional description */}
+            <div className="mt-4">
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Additional Details (optional)
+                {voiceTranscript ? (
+                  <span className="flex items-center gap-1.5">
+                    <FileText className="h-3.5 w-3.5 text-emerald-600" />
+                    Transcribed Description
+                    <span className="text-xs text-gray-400 font-normal">(edit if needed)</span>
+                  </span>
+                ) : (
+                  'Additional Details (optional — or use voice above)'
+                )}
               </label>
               <textarea
                 value={description}
@@ -393,6 +427,14 @@ export default function ReportPage() {
                   <div className="font-medium">{description}</div>
                 </div>
               )}
+
+              {audioBlob && (
+                <div className="bg-purple-50 p-3 rounded-lg text-sm flex items-center gap-2">
+                  <Mic className="h-4 w-4 text-purple-600" />
+                  <span className="text-purple-700 font-medium">Voice note attached</span>
+                  <span className="text-purple-400 text-xs">({(audioBlob.size / 1024).toFixed(0)} KB)</span>
+                </div>
+              )}
             </div>
 
             <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mt-4 text-sm text-amber-700 flex items-start gap-2">
@@ -400,6 +442,7 @@ export default function ReportPage() {
               <span>
                 Your report will be analyzed by <strong>Amazon Bedrock AI</strong> to classify the
                 issue type, severity, and health risk automatically.
+                {audioBlob && ' Your voice description will be included as supporting evidence.'}
               </span>
             </div>
 
