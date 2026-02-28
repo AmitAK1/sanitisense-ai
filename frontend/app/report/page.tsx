@@ -17,6 +17,9 @@ import {
 } from 'lucide-react';
 import { submitReport, uploadImageToS3, uploadAudioToS3, CATEGORY_LABELS } from '@/lib/api';
 import VoiceRecorder from '@/app/components/VoiceRecorder';
+import dynamic from 'next/dynamic';
+
+const ReportLocationMap = dynamic(() => import('@/app/components/ReportLocationMap'), { ssr: false });
 
 type Step = 'photo' | 'location' | 'review' | 'result';
 
@@ -324,8 +327,16 @@ export default function ReportPage() {
             </button>
 
             {location && (
-              <div className="mt-4 p-3 bg-emerald-50 rounded-lg text-sm text-emerald-700">
-                <span className="font-medium">Location:</span> {location.address}
+              <div className="mt-4 space-y-3">
+                <ReportLocationMap
+                  latitude={location.latitude}
+                  longitude={location.longitude}
+                  label="Your report location"
+                  height="180px"
+                />
+                <div className="p-3 bg-emerald-50 rounded-lg text-sm text-emerald-700">
+                  <span className="font-medium">Location:</span> {location.address}
+                </div>
               </div>
             )}
 
@@ -400,6 +411,15 @@ export default function ReportPage() {
                   src={imagePreview}
                   alt="Report"
                   className="w-full h-48 object-cover rounded-lg"
+                />
+              )}
+
+              {location && (
+                <ReportLocationMap
+                  latitude={location.latitude}
+                  longitude={location.longitude}
+                  label="Report location"
+                  height="160px"
                 />
               )}
 
@@ -490,6 +510,22 @@ export default function ReportPage() {
 
             {/* AI Analysis */}
             <h3 className="font-semibold text-gray-900 mb-3">AI Analysis Results</h3>
+
+            {/* Report Location on Map */}
+            {location && (
+              <div className="mb-4">
+                <ReportLocationMap
+                  latitude={location.latitude}
+                  longitude={location.longitude}
+                  label={`${result.ticket_id} — ${CATEGORY_LABELS[result.ai_analysis.category] || result.ai_analysis.category}`}
+                  height="200px"
+                />
+                <p className="text-xs text-gray-400 mt-1 text-center">
+                  📍 {location.latitude.toFixed(5)}°N, {location.longitude.toFixed(5)}°E
+                </p>
+              </div>
+            )}
+
             <div className="space-y-3">
               <div className="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
                 <span className="text-sm text-gray-500">Category</span>

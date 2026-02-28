@@ -5,8 +5,8 @@ import { Mic, MicOff, Square, Play, Pause, RotateCcw, Globe, Loader2 } from 'luc
 
 // ── Supported languages for speech recognition ──────────────────────────────
 const LANGUAGES = [
-  { code: 'hi-IN', label: 'हिंदी', name: 'Hindi' },
   { code: 'en-IN', label: 'English', name: 'English' },
+  { code: 'hi-IN', label: 'हिंदी', name: 'Hindi' },
   { code: 'mr-IN', label: 'मराठी', name: 'Marathi' },
   { code: 'ta-IN', label: 'தமிழ்', name: 'Tamil' },
   { code: 'te-IN', label: 'తెలుగు', name: 'Telugu' },
@@ -29,7 +29,7 @@ export default function VoiceRecorder({ onTranscript, onAudioReady, transcript =
   const [isPlaying, setIsPlaying] = useState(false);
   const [duration, setDuration] = useState(0);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
-  const [language, setLanguage] = useState('hi-IN');
+  const [language, setLanguage] = useState('en-IN');
   const [showLangPicker, setShowLangPicker] = useState(false);
   const [supported, setSupported] = useState(true);
   const [liveText, setLiveText] = useState('');
@@ -313,7 +313,7 @@ export default function VoiceRecorder({ onTranscript, onAudioReady, transcript =
       {/* Info text */}
       {!isRecording && !audioUrl && (
         <p className="mt-2.5 text-xs text-purple-500">
-          Speak in {selectedLang.name} to describe the problem. Your voice will be converted to text automatically and attached to the report.
+          Speak in any supported language to describe the problem. Your voice will be converted to text automatically and attached to the report.
         </p>
       )}
 
