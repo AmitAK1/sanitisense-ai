@@ -24,9 +24,15 @@ import {
   type Task,
 } from '@/lib/api';
 
-const WORKER_ID = 'W-001'; // Demo worker
+function getWorkerId(): string {
+  if (typeof window !== 'undefined') {
+    return localStorage.getItem('sanitisense_worker_id') || 'W-001';
+  }
+  return 'W-001';
+}
 
 export default function WorkerDashboard() {
+  const [workerId] = useState(getWorkerId);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
   const [filterStatus, setFilterStatus] = useState('pending');
@@ -112,7 +118,7 @@ export default function WorkerDashboard() {
             </div>
             <div className="flex items-center gap-2 bg-emerald-50 px-3 py-1.5 rounded-lg">
               <User className="h-4 w-4 text-emerald-600" />
-              <span className="text-sm font-medium text-emerald-700">{WORKER_ID}</span>
+              <span className="text-sm font-medium text-emerald-700">{workerId}</span>
             </div>
           </div>
         </div>

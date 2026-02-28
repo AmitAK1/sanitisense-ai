@@ -1,6 +1,9 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import dynamic from 'next/dynamic';
+
+const WardMap = dynamic(() => import('@/app/components/WardMap'), { ssr: false });
 import {
   BarChart3,
   TrendingUp,
@@ -249,13 +252,56 @@ export default function AdminDashboard() {
           </div>
         </div>
 
-        {/* ==================== HEATMAP & LEADERBOARD ==================== */}
+        {/* ==================== MAP + WARD SUMMARY ==================== */}
+        <div className="bg-white rounded-xl border border-gray-200 p-6">
+          <h3 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
+            <MapPin className="h-5 w-5 text-emerald-600" />
+            Ward-Level Heatmap
+            <span className="ml-auto text-xs font-normal text-gray-400">Click a ward for details</span>
+          </h3>
+          <WardMap wards={heatmap} height="420px" />
+
+          {/* Compact ward summary below map */}
+          <div className="mt-4 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2">
+            {heatmap
+              .sort((a, b) => b.open_reports - a.open_reports)
+              .slice(0, 10)
+              .map((ward) => (
+                <div
+                  key={ward.ward_number}
+                  className={`rounded-lg p-2.5 text-xs border ${
+                    ward.risk_level === 'high'
+                      ? 'border-red-200 bg-red-50'
+                      : ward.risk_level === 'medium'
+                      ? 'border-amber-200 bg-amber-50'
+                      : 'border-green-200 bg-green-50'
+                  }`}
+                >
+                  <div className="font-semibold text-gray-900 truncate">{ward.name}</div>
+                  <div className="text-gray-500 mt-0.5">{ward.open_reports} open · {ward.severity_avg} avg</div>
+                  <span
+                    className={`inline-block mt-1 text-[10px] font-bold px-1.5 py-0.5 rounded-full ${
+                      ward.risk_level === 'high'
+                        ? 'bg-red-100 text-red-700'
+                        : ward.risk_level === 'medium'
+                        ? 'bg-amber-100 text-amber-700'
+                        : 'bg-green-100 text-green-700'
+                    }`}
+                  >
+                    {ward.risk_level.toUpperCase()}
+                  </span>
+                </div>
+              ))}
+          </div>
+        </div>
+
+        {/* ==================== LEADERBOARD & TABLE ==================== */}
         <div className="grid lg:grid-cols-3 gap-6">
-          {/* Ward Heatmap (as a table since no map library) */}
+          {/* Ward table (compact) */}
           <div className="lg:col-span-2 bg-white rounded-xl border border-gray-200 p-6">
             <h3 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
-              <MapPin className="h-5 w-5 text-emerald-600" />
-              Ward-Level Overview
+              <BarChart3 className="h-5 w-5 text-emerald-600" />
+              Ward Data Table
             </h3>
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
@@ -270,7 +316,6 @@ export default function AdminDashboard() {
                 <tbody>
                   {heatmap
                     .sort((a, b) => b.open_reports - a.open_reports)
-                    .slice(0, 12)
                     .map((ward) => (
                       <tr key={ward.ward_number} className="border-b border-gray-50">
                         <td className="py-2.5 font-medium">{ward.name}</td>
