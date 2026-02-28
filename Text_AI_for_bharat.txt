@@ -1,0 +1,107 @@
+Team Name : Swadeshi Coders
+Problem Statement : Build an AI-powered solution that improves access to information, resources, or opportunities for communities and public systems.
+Team Leader Name : Amit Anil Kamble
+
+Brief about the Idea:
+The Pitch: SanitiSense AI is not just a reporting tool; it is a Civic Operating System. It creates a closed-loop ecosystem that connects Citizens (via inclusive reporting), Sanitation Workers (via dynamic route optimization), and Authorities (via epidemic prediction).
+Core Philosophy: "We don't just identify the trash; we ensure it leaves the street and prevent it from coming back."
+
+
+Your solution should be able to explain the following:
+How different is it from any of the other existing ideas?
+Existing Apps: Current apps like Swachhata fail because they are built for the literate elite, not the people actually living in the mess. By demanding text inputs and complex forms, the existing system accidentally filters out the very people who need it most.
+The Literacy Wall: We found that daily wage workers and slum residents abandon these apps immediately because they cannot navigate the complex English or Hindi menus required just to upload a photo.
+The Invisible Crisis: Because these communities cannot "log" a formal ticket, the administration assumes their neighborhoods are clean, leaving the city's most dangerous hotspots completely off the map.
+SanitiSense: Is a "Logistics Engine." We actively direct the trucks to the trash and force verification before closing tickets.
+How will it be able to solve the problem?
+Access: Voice/Photo-first interface breaks the literacy barrier.
+Efficiency: Optimizes truck routes to save fuel and clear high-priority hazards first.
+Accountability: "Proof of Cleanliness" prevents fake resolutions by workers.
+
+USP of the proposed solution
+The Triple-Lock Mechanism:
+AI Verification (Validates the Report).
+Route Optimization (Executes the Cleanup).
+Epidemic Forecasting (Predicts Health Risks).
+
+
+
+List of features offered by the solution
+Smart Route Optimization ("Uber for Garbage"):
+Dynamic generation of daily pickup routes based on urgency and traffic.
+Prioritizes bio-hazards and blocked roads automatically.
+Anti-Fraud "Proof of Cleanliness":
+Workers cannot close a ticket without uploading an "After" photo.
+AI compares "Before" vs. "After" images to ensure the specific waste pile is gone.
+Hyper-Local Epidemic Prediction:
+Correlates garbage accumulation zones with water stagnation data.
+Alerts health officials to potential Dengue/Malaria hotspots before outbreaks occur.
+
+
+Process flow diagram or Use-case diagram
+Add a flow diagram or a use case diagram or an architecture diagram.
+Draw a "Closed Loop" Cycle:
+Input: Citizen Uploads Photo (Offline/Online).
+Triage: AI Verifies & Assigns Severity Score.
+Logistics: Google OR-Tools calculates optimal truck route.
+Action: Driver receives "Turn-by-Turn" navigation to trash.
+Validation: Driver uploads "After" photo → AI Validation.
+Outcome: Ticket Closed + Risk Dashboard Updated.
+
+
+Wireframes/Mock diagrams of the proposed solution (optional)
+
+Left Screen (Citizen): Big Green Button (Camera). Minimal text.
+Middle Screen (Driver): A map view (like Uber Driver app) showing "Next Pickup: 200m away."
+Right Screen (Authority): A "Heatmap" showing Red Zones (High Risk of Disease).
+
+
+
+Architecture diagram of the proposed solution:
+Frontend (User & Driver Interfaces):
+Flutter / React Native: For a responsive, cross-platform mobile application (Android/iOS) that handles real-time navigation and camera inputs.
+Logistics & Optimization Engine:
+Google OR-Tools: To solve the Vehicle Routing Problem (VRP) for dynamic daily route generation.
+Google Maps SDK: For visualizing the optimized routes and providing turn-by-turn navigation to drivers.
+AI & Computer Vision Module:
+TensorFlow / PyTorch:
+Convolutional Neural Networks (CNN) for sanitation issue detection.
+Semantic Segmentation / Siamese Networks for "Before vs. After" comparison (Proof of Cleanliness).
+Predictive Analytics:
+Scikit-Learn / XGBoost: For the "Epidemic Prediction" model (correlating waste density data with water stagnation metrics).
+Cloud Infrastructure (AWS):
+AWS Lambda: Serverless compute for handling API requests.
+AWS S3: Scalable storage for citizen reports and evidence photos.
+Amazon RDS: Relational database for storing user profiles and ticket metadata.
+
+
+Technologies to be used in the solution:
+
+Frontend: Flutter (for offline-first capability).
+AI/ML: PyTorch/TensorFlow (Image Models), OpenAI Whisper (Voice).
+Logistics: Google OR-Tools (Optimization), Google Maps SDK (Navigation).
+Cloud: AWS S3 (Image Storage), AWS Lambda (Serverless Compute).
+
+
+Estimated implementation cost (optional):
+Implementation Cost:
+Zero Hardware Cost: Uses existing driver smartphones and citizen devices.
+Cloud Cost (AWS): Pay-per-use model
+  - Pilot (1 ward, 1,000 tickets/month): ₹8,000/month (₹8 per ticket)
+  - Small scale (3 wards, 10,000 tickets/month): ₹15,000/month (₹1.50 per ticket)
+  - City-wide (200,000 tickets/month): ₹120,000/month (₹0.60 per ticket)
+  - Optimized cost per ticket: ₹1.20-₹1.50 (with AWS cost optimization strategies)
+
+Return on Investment (ROI):
+Fuel Savings: 30% reduction in municipal fuel costs via route optimization (₹15,000/month per ward).
+Labor Savings: 40% reduction in time wasted visiting false alarms and inefficient routes.
+Break-Even: 2-3 months for pilot ward.
+
+Social Impact:
+Disease Prevention: Proactive removal of bio-hazards reduces vector-borne diseases (Dengue, Malaria, Cholera).
+Inclusion: 100% accessible to illiterate population through photo-first, voice-enabled interface.
+Community Trust: Evidence-backed accountability builds trust between citizens and civic systems.
+
+
+Add as per the requirements for the hackathon:
+

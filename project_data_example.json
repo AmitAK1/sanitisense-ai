@@ -1,0 +1,60 @@
+{
+  "project_name": "SanitiSense AI",
+  "team_leader": "Your Full Name",
+  "problem_statement": "Residents in underserved communities fail to get sanitation hazards (overflowing drains, garbage accumulation) resolved because municipal systems prioritize formal, written, and categorized grievances, ignoring unstructured photo- and voice-based reports.",
+  
+  "brief_idea": [
+    "SanitiSense AI is an AI-powered system that enables low-literacy citizens to report sanitation hazards using a photo and an optional voice note",
+    "The system verifies the issue using computer vision",
+    "Extracts contextual urgency from voice input",
+    "Converts informal citizen reports into structured, evidence-backed civic tickets that authorities can act upon"
+  ],
+  
+  "core_philosophy": "Instead of creating another complaint portal, the solution acts as an intelligent translation layer between citizen reality and municipal systems.",
+  
+  "usp_points": [
+    "Image-first reporting ensures evidence-based verification",
+    "AI filters spam and invalid submissions automatically",
+    "Converts vernacular, unstructured inputs into structured civic data",
+    "Aggregates repeated issues to expose ignored sanitation hotspots"
+  ],
+  
+  "solution_steps": [
+    "Citizens submit a photo of a sanitation issue (mandatory)",
+    "Optional voice note provides context such as duration, smell, or obstruction",
+    "AI validates whether the image represents a real sanitation hazard",
+    "The system classifies issue type and estimates severity",
+    "Structured and prioritized sanitation tickets are generated automatically",
+    "Repeated complaints are clustered to identify high-risk zones"
+  ],
+  
+  "features": {
+    "image_processing": [
+      "Image-based sanitation issue detection and validation",
+      "Automatic spam and irrelevant image rejection",
+      "Severity estimation using visual cues (scale, spread, obstruction)"
+    ],
+    "voice_analytics": [
+      "Voice-based context capture in local languages",
+      "NLP-based extraction of urgency indicators",
+      "Clustering of repeated complaints into sanitation hotspots",
+      "Evidence-backed dashboard for authorities or NGOs"
+    ]
+  },
+  
+  "technologies": [
+    "Computer Vision for sanitation image classification",
+    "Speech-to-Text for local language voice input",
+    "Natural Language Processing for context extraction",
+    "Rule-based + lightweight ML models for severity scoring",
+    "Spatial clustering for hotspot detection",
+    "Cloud-based backend for scalability"
+  ],
+  
+  "expected_impact": [
+    "Increased acknowledgment of valid sanitation complaints",
+    "Faster response to high-severity sanitation hazards",
+    "Reduced repeat complaints from the same areas",
+    "Improved accountability through evidence-backed reporting"
+  ]
+}

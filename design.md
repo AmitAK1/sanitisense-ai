@@ -15,14 +15,15 @@
 | Aspect | Detail |
 |--------|--------|
 | **Architecture** | Microservices with serverless-first approach (AWS Lambda, API Gateway) |
-| **Frontend** | Flutter (Citizen & Worker apps), React (Authority dashboard) |
-| **AI/ML Services** | Amazon Rekognition, Transcribe, Comprehend, Custom TensorFlow models |
-| **Database** | PostgreSQL 14 with PostGIS extension for spatial queries |
-| **Key AWS Services** | S3, RDS, Lambda, Rekognition, Transcribe, SageMaker, API Gateway, ElastiCache |
+| **Frontend** | React/Next.js (Citizen, Worker & Authority views — responsive web app) |
+| **AI/ML Services** | **Amazon Bedrock (Claude 3 Sonnet — Vision + Text)**, Titan Embeddings, Bedrock Knowledge Base (RAG), Amazon Rekognition, Transcribe |
+| **Database** | Amazon DynamoDB (serverless NoSQL) + Amazon S3 (object storage) |
+| **Key AWS Services** | Bedrock, S3, DynamoDB, Lambda, Rekognition, Transcribe, API Gateway, Amplify, CloudWatch |
+| **Generative AI** | Amazon Bedrock (Claude 3 Sonnet) for image analysis, severity scoring, before/after validation, report generation; Bedrock Knowledge Base + Titan Embeddings for RAG-based epidemic risk advisories |
 | **Cost (Optimized)** | ₹1.20-₹1.50 per ticket, ₹15,000/month for 10,000 tickets |
 | **Scalability** | Supports 10,000 concurrent users, 1M+ population city-wide |
 | **Security** | TLS 1.3, AES-256 encryption, RBAC, GDPR compliant |
-| **Offline Support** | Full offline capability for citizen and worker apps with background sync |
+| **Offline Support** | Progressive Web App with offline-capable photo queue and background sync |
 
 ---
 
@@ -53,149 +54,178 @@ SanitiSense AI follows a **microservices architecture** with three primary layer
 ┌─────────────────────────────────────────────────────────────┐
 │                     PRESENTATION LAYER                       │
 ├──────────────┬──────────────────┬─────────────────────────┤
-│  Citizen App │   Worker App     │  Authority Dashboard    │
-│  (Flutter)   │   (Flutter)      │  (React Web)            │
+│  Citizen     │   Worker         │  Authority Dashboard    │
+│  View        │   View           │  (Map + Analytics)      │
+│  (React/     │   (React/        │  (React/Next.js)        │
+│   Next.js)   │    Next.js)      │                         │
+│              │                  │  Deployed: AWS Amplify   │
 └──────────────┴──────────────────┴─────────────────────────┘
                          │
                          ▼
 ┌─────────────────────────────────────────────────────────────┐
 │                      API GATEWAY LAYER                       │
-│                    (AWS API Gateway)                         │
+│                    (AWS API Gateway + JWT)                   │
 └─────────────────────────────────────────────────────────────┘
                          │
                          ▼
 ┌─────────────────────────────────────────────────────────────┐
 │                   BUSINESS LOGIC LAYER                       │
 ├──────────────┬──────────────────┬─────────────────────────┤
-│ Report       │  Route           │  Analytics              │
-│ Processing   │  Optimization    │  & Prediction           │
+│ Report       │  Task            │  Analytics              │
+│ Processing   │  Management      │  & Prediction           │
 │ Service      │  Service         │  Service                │
-│ (Lambda)     │  (Lambda/EC2)    │  (Lambda/SageMaker)     │
+│ (Lambda)     │  (Lambda)        │  (Lambda)               │
 └──────────────┴──────────────────┴─────────────────────────┘
                          │
                          ▼
 ┌─────────────────────────────────────────────────────────────┐
-│                    AI/ML SERVICES LAYER                      │
+│                 GENERATIVE AI SERVICES LAYER                 │
 ├──────────────┬──────────────────┬─────────────────────────┤
-│ Image        │  Voice           │  Validation             │
-│ Classification│ Transcription   │  & Comparison           │
-│ (Rekognition)│ (Transcribe)     │  (Custom ML)            │
+│ Amazon       │  Amazon          │  Amazon Bedrock         │
+│ Bedrock      │  Bedrock KB      │  (Claude 3 Sonnet)      │
+│ (Claude 3    │  + Titan         │  Before/After           │
+│  Sonnet -    │  Embeddings      │  Validation &           │
+│  Vision +    │  (RAG for        │  Report Generation      │
+│  Text)       │  Epidemic Risk)  │                         │
+├──────────────┼──────────────────┼─────────────────────────┤
+│ Amazon       │  Amazon          │  Amazon                 │
+│ Rekognition  │  Transcribe      │  CloudWatch             │
+│ (Image       │  (Voice→Text,    │  (Monitoring)           │
+│  Labels)     │  7 Languages)    │                         │
 └──────────────┴──────────────────┴─────────────────────────┘
                          │
                          ▼
 ┌─────────────────────────────────────────────────────────────┐
 │                      DATA LAYER                              │
 ├──────────────┬──────────────────┬─────────────────────────┤
-│ Relational   │  Object Storage  │  Cache                  │
-│ Database     │  (Images/Audio)  │  (Redis)                │
-│ (RDS)        │  (S3)            │  (ElastiCache)          │
+│ Amazon       │  Amazon S3       │  Amazon S3              │
+│ DynamoDB     │  (Photos, Audio  │  (RAG Knowledge         │
+│ (Reports,    │   Evidence)      │   Base Source Docs)     │
+│  Tasks,      │                  │                         │
+│  Users)      │                  │                         │
 └──────────────┴──────────────────┴─────────────────────────┘
 ```
 
 ### 1.2 Architecture Principles
 
-1. **Microservices:** Loosely coupled services for independent scaling
-2. **Serverless-First:** Use AWS Lambda for cost optimization
-3. **Offline-First:** Mobile apps work without internet; sync when available
-4. **Event-Driven:** Asynchronous processing using message queues
-5. **Cloud-Native:** Leverage managed AWS services for reliability
+1. **Generative AI-First:** Amazon Bedrock (Claude 3 Sonnet) as the core intelligence layer — replaces multiple custom ML models with a single foundation model capable of vision, text analysis, and structured output
+2. **Serverless-First:** AWS Lambda + DynamoDB + API Gateway for zero-ops, pay-per-use cost optimization
+3. **RAG-Powered Predictions:** Amazon Bedrock Knowledge Base + Titan Embeddings for context-grounded epidemic risk advisories
+4. **Offline-First:** Progressive Web App queues reports locally; syncs when connectivity available
+5. **Event-Driven:** S3 triggers + DynamoDB Streams for asynchronous AI processing
+6. **Cloud-Native:** 100% AWS managed services for reliability and scalability
 
 ### 1.3 Data Flow
 
 #### Citizen Report Submission Flow
 ```
-1. Citizen captures photo → 2. App stores locally (offline)
+1. Citizen captures photo → 2. App stores locally (offline queue)
 3. When online, upload to S3 → 4. Trigger Lambda function
-5. Rekognition analyzes image → 6. Transcribe processes voice
-7. NLP extracts context → 8. Severity scoring algorithm
-9. Store in RDS → 10. Notify authorities → 11. Update dashboard
+5. Lambda sends image to Amazon Bedrock (Claude 3 Sonnet Vision):
+   - Classifies issue type, scores severity 1-10, detects spam
+   - Returns structured JSON
+6. Amazon Rekognition provides supplementary object labels
+7. If voice note: Amazon Transcribe processes audio (7 Indian languages)
+8. Transcribed text → Bedrock for urgency extraction & severity adjustment
+9. Store structured civic ticket in DynamoDB
+10. Update Authority dashboard in real-time
 ```
 
 #### Worker Task Completion Flow
 ```
 1. Worker views assigned task → 2. Navigates to location
 3. Completes cleanup → 4. Uploads "After" photo to S3
-5. Trigger validation Lambda → 6. Retrieve "Before" photo from report
-7. AI comparison (semantic segmentation) → 8. Calculate waste reduction %
-9. If valid (>70% reduction) → Mark complete → Update dashboard → Close ticket
-10. If invalid → Reject → Notify worker → Keep ticket open → Request re-cleanup
+5. Trigger validation Lambda → 6. Retrieve "Before" photo from S3
+7. Both images sent to Amazon Bedrock (Claude 3 Sonnet Vision):
+   - "Compare these before/after images. Estimate waste reduction %"
+   - Returns validation score and assessment
+8. If valid (≥70% reduction) → Mark complete → Update dashboard → Close ticket
+9. If invalid → Reject → Notify worker → Keep ticket open
+```
+
+#### Epidemic Risk Advisory Flow (RAG)
+```
+1. DynamoDB Stream detects 5+ reports in geographic cluster (30 days)
+2. Lambda queries Amazon Bedrock Knowledge Base:
+   - Knowledge Base sources: WHO sanitation guidelines, disease correlation data
+   - Titan Embeddings index documents in vector store
+   - RAG query: "Given [cluster data], assess disease outbreak risk"
+3. Bedrock generates context-grounded risk advisory
+4. Risk level + advisory text stored in DynamoDB
+5. Authority dashboard displays AI-generated health risk panel
 ```
 
 ---
 
 ## 2. Component Design
 
-### 2.1 Citizen Mobile Application
+### 2.1 Citizen Reporting View
 
-**Technology:** Flutter (Dart)  
-**Target Platforms:** Android 8.0+  
-**Key Features:** Offline-first, camera integration, voice recording
+**Technology:** React 18 + Next.js 14 + TypeScript  
+**Target Platforms:** Responsive Web (mobile-first PWA), Android 8.0+ via browser  
+**Key Features:** Offline-capable, camera integration, voice recording, zero-literacy design
 
-#### Architecture Pattern: BLoC (Business Logic Component)
+#### Architecture Pattern: React Server Components + Client Components
 
 **Modules:**
-- **Camera Module:** Native camera integration with compression
-- **Voice Recorder:** Audio recording with format conversion (AAC/MP3)
-- **Offline Storage:** SQLite for local data persistence
-- **Sync Manager:** Background sync when connectivity available
-- **Location Service:** GPS coordinates with fallback to network location
+- **Photo Upload Module:** Browser camera API / file upload with client-side compression
+- **Voice Recorder:** MediaRecorder API for audio capture (WebM/MP3)
+- **Offline Queue:** IndexedDB for local data persistence + Service Worker for background sync
+- **Location Service:** Geolocation API with fallback to IP-based location
 
 **UI Screens:**
 1. Home Screen: Single large "Report Issue" button with camera icon
-2. Camera Screen: Full-screen camera with capture button
-3. Voice Note Screen: Record/stop/play controls with waveform visualization
-4. Confirmation Screen: Ticket ID display with status tracking option
-5. Track Status Screen: Simple list of submitted reports
+2. Photo Capture: Full-screen camera/upload interface
+3. Voice Note: Record/stop/play controls with waveform visualization
+4. Confirmation Screen: Ticket ID display with AI classification result
+5. Track Status: Simple list of submitted reports with severity badges
 
 **Offline Capability:**
-- Store photos in local app directory (max 10 pending reports)
-- Queue metadata in SQLite
-- Background service checks connectivity every 5 minutes
-- Upload in order of severity (high priority first)
+- Service Worker caches app shell for offline access
+- IndexedDB stores photos + metadata (max 10 pending reports)
+- Background Sync API uploads when connectivity returns
 - Show sync status indicator
 
-### 2.2 Worker Mobile Application
+### 2.2 Worker Task View
 
-**Technology:** Flutter (Dart)  
-**Target Platforms:** Android 8.0+  
-**Key Features:** Map integration, navigation, task management
+**Technology:** React 18 + Next.js 14 + TypeScript  
+**Target Platforms:** Responsive Web (mobile-first), Android 8.0+ via browser  
+**Key Features:** Map integration, task management, before/after validation
 
 **Modules:**
-- **Map Module:** Google Maps SDK integration
-- **Navigation Module:** Turn-by-turn directions with voice guidance
-- **Task Manager:** View, accept, complete tasks
-- **Camera Module:** Before/after photo capture
-- **Offline Maps:** Download assigned route areas
+- **Map Module:** Leaflet.js / Mapbox GL for task visualization
+- **Task Manager:** View, accept, complete tasks with priority sorting
+- **Camera Module:** Browser camera API for after-photo capture
+- **Validation Feedback:** Real-time display of Bedrock validation result
 
 **UI Screens:**
-1. Login Screen: Username/password + OTP verification
-2. Task List Screen: Prioritized list with severity indicators
-3. Map View Screen: All assigned tasks on map (Uber-like interface)
-4. Navigation Screen: Active navigation with next task preview
-5. Task Detail Screen: Issue photos, location, description
-6. Completion Screen: Upload "After" photo with validation feedback
-7. Performance Dashboard: Personal stats and leaderboard
+1. Login Screen: Username/password authentication
+2. Task List Screen: Prioritized list with severity indicators (color-coded)
+3. Map View Screen: All assigned tasks on interactive map
+4. Task Detail Screen: Before photos, AI analysis, location, description
+5. Completion Screen: Upload "After" photo → instant AI validation feedback
+6. Performance Dashboard: Personal stats (completion rate, validation score)
 
-### 2.3 Authority Web Dashboard
+### 2.3 Authority Dashboard View
 
-**Technology:** React.js + Material-UI  
+**Technology:** React 18 + Next.js 14 + TypeScript + Tailwind CSS  
 **Target Platforms:** Web browsers (Chrome, Firefox, Safari)  
-**Key Features:** Real-time monitoring, analytics, reporting
+**Key Features:** Real-time monitoring, AI-powered analytics, RAG-based epidemic advisories
 
 **Modules:**
-- **Map Visualization:** Interactive map with clustered markers
-- **Analytics Engine:** Charts and graphs using Chart.js/D3.js
-- **Report Generator:** PDF/Excel export functionality
+- **Map Visualization:** Leaflet.js with clustered, color-coded markers
+- **Analytics Engine:** Charts using Recharts/Chart.js
+- **AI Advisory Panel:** Bedrock Knowledge Base (RAG) epidemic risk advisories
 - **Alert System:** Real-time notifications for high-priority issues
-- **User Management:** RBAC for different authority levels
+- **Evidence Viewer:** Side-by-side before/after photo comparison with AI scores
 
 **UI Sections:**
-1. Dashboard Home: Key metrics, active issues, recent completions
-2. Map View: Interactive map with filters and search
-3. Analytics: Trends, hotspots, performance metrics
-4. Epidemic Risk: Heatmap with risk zones and predictions
-5. Reports: Generate and download custom reports
-6. Settings: User management, system configuration
+1. Dashboard Home: Key metrics (total reports, pending, resolved, avg time)
+2. Map View: Interactive map with severity-colored markers + filters
+3. Analytics: Trend charts, category breakdown, resolution time
+4. **AI Epidemic Risk Panel:** RAG-generated health risk advisories per zone
+5. Evidence Viewer: Before/after photos with Bedrock validation scores
+6. Reports: Export data as PDF/Excel
 
 ---
 
@@ -205,35 +235,31 @@ SanitiSense AI follows a **microservices architecture** with three primary layer
 
 | Component | Technology | Justification |
 |-----------|------------|---------------|
-| Citizen App | Flutter 3.x | Cross-platform, offline-first, native performance |
-| Worker App | Flutter 3.x | Consistent UX, code reuse, map integration |
-| Dashboard | React 18 + TypeScript | Rich ecosystem, real-time updates, component reusability |
-| UI Framework | Material Design 3 | Accessibility, familiar patterns, responsive |
-| State Management | BLoC (Flutter), Redux (React) | Predictable state, testability |
-| Maps | Google Maps SDK | Reliable, offline support, navigation |
+| Web App (All Views) | React 18 + Next.js 14 + TypeScript | SSR, single codebase for citizen/worker/authority views, mobile-responsive |
+| UI Framework | Tailwind CSS + shadcn/ui | Rapid prototyping, accessible, responsive |
+| State Management | React Context + TanStack Query | Simple, efficient server state caching |
+| Maps | Leaflet.js / Mapbox GL | Free, interactive, mobile-friendly |
+| Deployment | **AWS Amplify** | One-click CI/CD, live URL, custom domain |
 
 ### 3.2 Backend Technologies
 
 | Component | Technology | Justification |
 |-----------|------------|---------------|
-| API Gateway | AWS API Gateway | Managed service, auto-scaling, request throttling |
-| Compute | AWS Lambda (Node.js 18) | Serverless, pay-per-use, auto-scaling |
-| Heavy Compute | AWS EC2 (t3.medium) | Route optimization, batch processing |
-| Database | Amazon RDS (PostgreSQL 14) | ACID compliance, spatial queries (PostGIS) |
-| Cache | Amazon ElastiCache (Redis) | Fast reads, session management |
-| Object Storage | Amazon S3 | Scalable, durable, lifecycle policies |
-| Message Queue | Amazon SQS | Asynchronous processing, decoupling |
+| API Gateway | **AWS API Gateway** | Managed service, auto-scaling, request throttling |
+| Compute | **AWS Lambda** (Python 3.12) | Serverless, pay-per-use, auto-scaling |
+| Database | **Amazon DynamoDB** | Serverless NoSQL, zero-ops, auto-scaling, single-digit ms latency |
+| Object Storage | **Amazon S3** | Scalable, durable, lifecycle policies, triggers Lambda |
+| Frontend Hosting | **AWS Amplify** | CI/CD, live URL, SSR support |
 
 ### 3.3 AI/ML Technologies
 
 | Component | Technology | Justification |
 |-----------|------------|---------------|
-| Image Classification | Amazon Rekognition Custom Labels | Pre-trained models, easy training, managed |
-| Speech-to-Text | Amazon Transcribe | Multi-language, custom vocabulary |
-| NLP | AWS Comprehend | Sentiment analysis, entity extraction |
-| Custom ML | TensorFlow 2.x / PyTorch | Semantic segmentation, before/after comparison |
-| ML Training | Amazon SageMaker | Managed training, model versioning |
-| ML Inference | Lambda + SageMaker Endpoint | Low latency, cost-effective |
+| **Generative AI (Core)** | **Amazon Bedrock (Claude 3 Sonnet)** | Multi-modal foundation model: vision + text in one API call; classifies images, scores severity, validates cleanup, generates reports |
+| **RAG Knowledge Base** | **Amazon Bedrock Knowledge Base + Titan Embeddings** | Grounds epidemic risk advisories in real health data documents; retrieval-augmented generation for accuracy |
+| Image Labels | Amazon Rekognition | Supplementary structured object detection with confidence scores |
+| Speech-to-Text | Amazon Transcribe | Multi-language support (7 Indian languages), custom vocabulary |
+| NLP Analysis | **Amazon Bedrock (Claude 3 Sonnet)** | Urgency extraction from transcribed text; replaces Comprehend with richer contextual understanding |
 
 ### 3.4 DevOps & Monitoring
 
@@ -250,16 +276,62 @@ SanitiSense AI follows a **microservices architecture** with three primary layer
 
 | Component | Technology | Justification |
 |-----------|------------|---------------|
-| Route Optimization | Google OR-Tools | Open source, VRP solver, Python library |
-| Spatial Analysis | PostGIS (PostgreSQL extension) | Geospatial queries, clustering |
-| Analytics | Amazon QuickSight (optional) | BI dashboards, data visualization |
-| Data Pipeline | AWS Glue (optional Phase 2) | ETL, data transformation |
+| Route Optimization | **Amazon Bedrock (Claude 3 Sonnet)** | Generates optimized task sequences based on priority + location (replaces OR-Tools for prototype) |
+| Spatial Analysis | DynamoDB geohash queries | Lightweight geospatial clustering using geohash-based partitioning |
+| Analytics | Built-in dashboard (Recharts) | Embedded in React dashboard, no extra service needed |
 
 ---
 
 ## 4. AWS Services Architecture
 
 ### 4.1 Core AWS Services
+
+#### Amazon Bedrock (Generative AI — CORE SERVICE)
+**Purpose:** Central intelligence layer for all AI tasks — replaces multiple custom ML models with a single foundation model
+
+**Models Used:**
+- **Claude 3 Sonnet (Anthropic):** Multi-modal (vision + text) foundation model
+  - Image classification & severity scoring
+  - Before/after cleanup validation
+  - Urgency extraction from transcribed voice notes
+  - Structured report generation for authorities
+- **Titan Text Embeddings V2 (Amazon):** Vector embeddings for RAG
+
+**Bedrock Knowledge Base (RAG):**
+- **Data Sources:** WHO sanitation guidelines, disease-outbreak correlation studies, municipal health data (stored in S3)
+- **Vector Store:** Amazon OpenSearch Serverless (managed by Bedrock KB)
+- **Use Case:** When hotspot detected (5+ reports in area), RAG query generates context-grounded epidemic risk advisory
+- **Why RAG:** Prevents hallucination; grounds health predictions in real medical/epidemiological data
+
+**Key API Calls:**
+```python
+# Image Analysis (Vision)
+bedrock.invoke_model(
+    modelId="anthropic.claude-3-sonnet-20240229-v1:0",
+    body={
+        "messages": [{
+            "role": "user",
+            "content": [
+                {"type": "image", "source": {"type": "base64", "data": image_b64}},
+                {"type": "text", "text": "Analyze this photo for sanitation issues. Return JSON: {category, severity_score, description, is_spam}"}
+            ]
+        }]
+    }
+)
+
+# RAG Query (Epidemic Advisory)
+bedrock_agent.retrieve_and_generate(
+    knowledgeBaseId="KB_ID",
+    input={"text": f"Given {cluster_data}, assess disease outbreak risk and recommend preventive measures"}
+)
+```
+
+**Why Bedrock is Required (Evaluator Justification):**
+1. **Multi-modal understanding:** A single API call classifies image + generates human-readable description + scores severity — no custom model training needed
+2. **Contextual intelligence:** Understands code-mixed Hindi-English voice transcripts better than rule-based NLP
+3. **RAG-grounded predictions:** Epidemic advisories are factually grounded in health literature, not hallucinated
+4. **Before/after reasoning:** Can visually compare two images and estimate waste reduction % with natural language explanation
+5. **Scalability:** Pay-per-token, no infrastructure to manage
 
 #### Amazon S3 (Simple Storage Service)
 **Purpose:** Store citizen-uploaded photos, worker completion photos, audio files
@@ -287,48 +359,62 @@ sanitisense-media/
 - Encryption: AES-256 server-side encryption
 - Access: Pre-signed URLs with 15-minute expiry
 
-#### Amazon RDS (Relational Database Service)
-**Purpose:** Store structured data (tickets, users, tasks, analytics)
+#### Amazon DynamoDB
+**Purpose:** Primary database for all structured data (reports, tasks, users, analytics)
 
-**Instance Type:** db.t3.medium (2 vCPU, 4GB RAM)  
-**Engine:** PostgreSQL 14 with PostGIS extension  
-**Storage:** 100GB SSD with auto-scaling to 500GB  
-**Backup:** Automated daily backups, 7-day retention
+**Table Design (Single-Table Pattern):**
+```
+Table: sanitisense-main
+├── PK: REPORT#{ticket_id}  SK: METADATA    → Report details
+├── PK: REPORT#{ticket_id}  SK: MEDIA#...   → Photo/audio S3 keys
+├── PK: TASK#{task_id}      SK: METADATA    → Task assignment details
+├── PK: USER#{user_id}      SK: PROFILE     → User profile
+├── PK: WORKER#{worker_id}  SK: TASK#...    → Worker's assigned tasks
+├── PK: ZONE#{geohash}      SK: REPORT#...  → Geo-indexed reports (GSI)
+└── PK: STATS#{date}        SK: DAILY       → Aggregated daily analytics
 
-**Database Schema:** (See Section 5)
+GSI-1: status-severity-index (PK: status, SK: severity_score)
+GSI-2: geohash-index (PK: geohash_prefix, SK: created_at)
+```
+
+**Configuration:**
+- Capacity: On-Demand (auto-scales, pay-per-request)
+- Encryption: AES-256 at rest
+- Point-in-time recovery: Enabled
+- TTL: Auto-delete old analytics after 365 days
+
+**Why DynamoDB over RDS:**
+- Zero-ops, no schema migrations
+- Single-digit millisecond latency
+- Serverless — aligns with Lambda-based architecture
+- Cost-effective at prototype scale (free tier: 25 WCU / 25 RCU)
 
 #### AWS Lambda
 **Purpose:** Serverless compute for API endpoints and event processing
 
 **Functions:**
-1. `report-processor`: Process new citizen reports
-2. `image-classifier`: Trigger Rekognition and classify images
-3. `voice-transcriber`: Trigger Transcribe and extract context
-4. `severity-scorer`: Calculate severity based on AI outputs
-5. `route-optimizer`: Generate daily routes (scheduled)
-6. `validation-checker`: Validate worker completion photos
-7. `epidemic-predictor`: Calculate disease risk scores (scheduled)
-8. `notification-sender`: Send alerts to authorities
+1. `report-processor`: Process new citizen reports → calls Bedrock + Rekognition
+2. `image-analyzer`: Dedicated Bedrock vision analysis for complex cases
+3. `voice-processor`: Trigger Transcribe + Bedrock NLP for urgency extraction
+4. `task-manager`: CRUD operations for worker task assignment
+5. `validation-checker`: Before/after comparison via Bedrock vision
+6. `epidemic-advisor`: RAG query to Bedrock Knowledge Base
+7. `dashboard-api`: Aggregate DynamoDB data for dashboard
 
 **Configuration:**
-- Runtime: Node.js 18
-- Memory: 512MB - 2GB (based on function)
-- Timeout: 30 seconds (API), 15 minutes (batch)
-- Concurrency: 100 concurrent executions
+- Runtime: Python 3.12
+- Memory: 512MB - 1GB (based on function)
+- Timeout: 30 seconds (API), 5 minutes (AI processing)
 
 #### Amazon Rekognition
-**Purpose:** Image classification and object detection
-
-**Custom Labels Model:**
-- Training dataset: 5,000+ labeled images per category
-- Categories: garbage_pile, overflowing_drain, blocked_sewer, animal_carcass, medical_waste, spam
-- Confidence threshold: 85%
-- Inference: Real-time via Lambda
+**Purpose:** Supplementary image label detection (structured object labels with confidence scores)
 
 **Features Used:**
-- Custom Labels: Sanitation issue classification
-- Object Detection: Identify waste objects
+- DetectLabels: Identify objects (garbage, vehicle, building, water, etc.)
 - Image Moderation: Filter inappropriate content
+- Confidence scores used as additional input to Bedrock analysis
+
+**Note:** Rekognition provides structured labels; Bedrock provides deeper contextual analysis. Together they form a robust two-layer classification system.
 
 #### Amazon Transcribe
 **Purpose:** Convert voice notes to text
@@ -339,13 +425,8 @@ sanitisense-media/
 - Output format: JSON with timestamps
 - Speaker identification: Disabled (single speaker)
 
-#### Amazon Comprehend
-**Purpose:** Extract urgency indicators from transcribed text
-
-**Features Used:**
-- Sentiment Analysis: Detect urgency/frustration
-- Key Phrase Extraction: Identify important context
-- Entity Recognition: Extract locations, durations
+#### Amazon Comprehend → Replaced by Amazon Bedrock
+**Note:** NLP tasks (sentiment analysis, urgency extraction, key phrase detection) are now handled by Amazon Bedrock (Claude 3 Sonnet), which provides superior contextual understanding of code-mixed Indian language text compared to Comprehend's rule-based approach.
 
 #### Amazon API Gateway
 **Purpose:** RESTful API for mobile apps and dashboard
@@ -364,33 +445,26 @@ sanitisense-media/
 - CORS: Enabled for web dashboard
 - Caching: 5-minute TTL for dashboard endpoints
 
-#### Amazon SQS (Simple Queue Service)
-**Purpose:** Asynchronous task processing
+#### Amazon SQS (Simple Queue Service) → Simplified
+**Purpose:** For prototype, S3 event triggers + DynamoDB Streams handle async processing. SQS reserved for production scale.
 
-**Queues:**
+**Production Queues (Phase 2+):**
 1. `report-processing-queue`: New reports for AI analysis
 2. `notification-queue`: Alerts to send
-3. `route-optimization-queue`: Daily route generation requests
-4. `validation-queue`: Worker completion validations
+3. `validation-queue`: Worker completion validations
+
+#### Amazon ElastiCache → Removed for Prototype
+**Note:** For prototype scope, DynamoDB on-demand mode provides sufficient read performance. ElastiCache (Redis) is planned for production Phase 2+ when dashboard query load increases.
+
+#### AWS Amplify
+**Purpose:** Frontend hosting with CI/CD and live URL
 
 **Configuration:**
-- Visibility timeout: 5 minutes
-- Message retention: 4 days
-- Dead letter queue: For failed messages
-
-#### Amazon ElastiCache (Redis)
-**Purpose:** Caching and session management
-
-**Use Cases:**
-- Cache dashboard statistics (5-minute TTL)
-- Store active worker sessions
-- Rate limiting for API endpoints
-- Temporary storage for route optimization results
-
-**Configuration:**
-- Node type: cache.t3.micro
-- Cluster mode: Disabled (single node for MVP)
-- Eviction policy: LRU (Least Recently Used)
+- Connected to GitHub repository
+- Auto-builds on push to `main` branch
+- Provides public HTTPS URL for evaluators
+- Supports Next.js SSR
+- Environment variables for API Gateway endpoint URL
 
 ---
 
@@ -699,228 +773,260 @@ Response (200 OK):
 
 ## 7. AI/ML Pipeline
 
-### 7.1 Image Classification Pipeline
+### 7.1 Image Classification Pipeline (Amazon Bedrock + Rekognition)
 
-**Objective:** Classify sanitation issues and detect spam
+**Objective:** Classify sanitation issues, detect spam, score severity — all via Generative AI
 
 **Architecture:**
 ```
-Input Image → Preprocessing → Rekognition Custom Labels → 
-Post-processing → Severity Estimation → Store Results
+Input Image → S3 Upload → Lambda Trigger →
+  ├── Amazon Rekognition (DetectLabels) → Structured object labels
+  └── Amazon Bedrock (Claude 3 Sonnet Vision) → Classification + Severity + Description
+→ Merge results → Store in DynamoDB
 ```
 
-**Model Training:**
-1. **Dataset Collection:**
-   - 5,000+ images per category
-   - Categories: garbage_pile, overflowing_drain, blocked_sewer, animal_carcass, medical_waste, spam
-   - Crowdsourced from municipal workers and online datasets
+**Bedrock Vision Prompt (Engineered):**
+```python
+prompt = """
+Analyze this photo taken by a citizen reporting a sanitation issue in an Indian city.
 
-2. **Data Augmentation:**
-   - Rotation, flip, brightness adjustment
-   - Simulate different lighting conditions
-   - Add noise for robustness
+Return a JSON object with exactly these fields:
+{
+  "is_spam": boolean,        // true if not a sanitation issue (selfie, food, random photo)
+  "category": string,         // one of: garbage_pile, overflowing_drain, blocked_sewer, animal_carcass, medical_waste, stagnant_water, other
+  "severity_score": integer,  // 1-10 scale (10=most severe)
+  "description": string,      // 2-3 sentence human-readable description
+  "health_risk": string,      // none, low, medium, high
+  "confidence": float          // 0.0 to 1.0
+}
 
-3. **Training Process:**
-   - Use Amazon Rekognition Custom Labels
-   - Train/validation split: 80/20
-   - Target accuracy: 90%+
-   - Iterative improvement with production data
+Severity guidelines:
+- 1-3: Minor litter, small debris
+- 4-6: Moderate accumulation, partial drain blockage
+- 7-8: Large garbage piles, fully blocked drains, stagnant water
+- 9-10: Bio-hazards, medical waste, dead animals, contaminated water near residences
+"""
+```
 
-**Inference:**
-- Lambda function triggers Rekognition API
-- Response time: < 2 seconds
-- Confidence threshold: 85%
-- Fallback: Manual review queue for low confidence
+**Why Bedrock Vision over Custom ML:**
+1. **Zero training data required** — Claude 3 Sonnet understands sanitation images out-of-the-box
+2. **Single API call** replaces 3 separate models (classifier + severity scorer + description generator)
+3. **Structured JSON output** — directly usable by downstream systems
+4. **Handles edge cases** — understands context (e.g., "garbage near water body" = higher severity)
+
+**Supplementary Rekognition:**
+- Provides structured `Labels[]` with `Confidence` scores
+- Used as secondary validation (e.g., if Bedrock says "garbage" but Rekognition detects "Food" with 95% confidence → flag for review)
 
 **Severity Estimation Algorithm:**
 ```python
-def calculate_severity(category, bounding_boxes, image_metadata):
-    base_severity = CATEGORY_SEVERITY_MAP[category]
+def calculate_final_severity(bedrock_result, rekognition_labels, voice_urgency=0):
+    base_score = bedrock_result['severity_score']
     
-    # Factor 1: Size of waste (from bounding boxes)
-    total_area = sum([box.width * box.height for box in bounding_boxes])
-    size_factor = min(total_area / image_area, 1.0) * 3
+    # Boost if Rekognition detects high-risk objects
+    HIGH_RISK_LABELS = ['Water', 'Medical', 'Animal', 'Stagnant']
+    for label in rekognition_labels:
+        if label['Name'] in HIGH_RISK_LABELS and label['Confidence'] > 80:
+            base_score = min(base_score + 1, 10)
     
-    # Factor 2: Proximity to sensitive areas (from GPS)
-    proximity_factor = check_proximity_to_schools_hospitals(gps_coords)
+    # Add voice urgency adjustment (from Bedrock NLP)
+    final_score = min(base_score + voice_urgency, 10)
     
-    # Factor 3: Obstruction level (heuristic)
-    obstruction_factor = estimate_obstruction(bounding_boxes)
-    
-    severity = base_severity + size_factor + proximity_factor + obstruction_factor
-    return min(max(severity, 1), 10)  # Clamp to 1-10
+    return max(final_score, 1)  # Clamp to 1-10
 ```
 
-### 7.2 Voice Processing Pipeline
+### 7.2 Voice Processing Pipeline (Transcribe + Bedrock NLP)
 
-**Objective:** Transcribe voice notes and extract urgency indicators
+**Objective:** Transcribe voice notes and extract urgency indicators using Generative AI
 
 **Architecture:**
 ```
-Audio File → Format Conversion → Amazon Transcribe → 
-Text Output → Amazon Comprehend → Urgency Score → Store Results
+Audio File → S3 → Amazon Transcribe (7 languages) →
+Transcribed Text → Amazon Bedrock (Claude 3 Sonnet) →
+Urgency Score + Context Extraction → Update DynamoDB report
 ```
 
 **Process:**
-1. **Audio Preprocessing:**
-   - Convert to supported format (MP3/WAV)
-   - Normalize audio levels
-   - Remove background noise (optional)
-
-2. **Transcription:**
-   - Amazon Transcribe with custom vocabulary
-   - Supports 7 Indian languages: Hindi, English, Marathi, Tamil, Telugu, Bengali, Gujarati
-   - Language auto-detection (if not specified by user)
-   - Output: JSON with text and timestamps
-
-3. **NLP Analysis:**
-   - Extract key phrases using Comprehend
-   - Identify urgency keywords in multiple languages: "smell"/"badbu", "days"/"din", "weeks"/"hafte", "children"/"bacche", "water"/"paani", "blocking"/"band"
-   - Sentiment analysis for frustration level
-
-4. **Urgency Scoring:**
+1. **Audio Upload:** Citizen records voice note → stored in S3
+2. **Transcription:** Amazon Transcribe converts speech to text
+   - Languages: Hindi (hi-IN), English (en-IN), Marathi (mr-IN), Tamil (ta-IN), Telugu (te-IN), Bengali (bn-IN), Gujarati (gu-IN)
+   - Custom vocabulary: sanitation terms ("kachra", "gutter", "naala")
+3. **Bedrock NLP Analysis:**
 ```python
-URGENCY_KEYWORDS = {
-    "smell": 2, "stink": 2, "odor": 2,
-    "days": 1, "weeks": 2, "months": 3,
-    "children": 2, "school": 2,
-    "water": 2, "drain": 1,
-    "blocking": 2, "road": 1
+prompt = f"""
+A citizen reported a sanitation issue and provided this voice note transcript:
+\"{transcript}\"
+
+Extract the following as JSON:
+{{
+  "urgency_adjustment": integer,  // -2 to +3 adjustment to severity score
+  "duration_mentioned": string,   // how long the issue has persisted (if mentioned)
+  "health_concerns": [string],    // any health concerns mentioned
+  "key_context": string,          // 1-sentence summary of additional context
+  "language_detected": string      // primary language of the transcript
+}}
+
+Urgency rules:
++3: Mentions children, health risk, blocked road, or emergency
++2: Mentions smell, water contamination, or weeks/months duration
++1: Mentions specific obstruction or daily impact
+0: General complaint
+-1: Seems uncertain or hesitant
+-2: Contradicts image (e.g., says area is mostly clean)
+"""
+```
+
+**Why Bedrock over Comprehend for NLP:**
+- Comprehend struggles with code-mixed Hindi-English text
+- Bedrock understands contextual urgency ("bacche khelte hain wahan" = children play there = +3)
+- Returns structured JSON directly, no post-processing needed
+```
+
+### 7.3 Before-After Validation Pipeline (Amazon Bedrock Vision)
+
+**Objective:** Verify actual cleanup occurred using Generative AI visual comparison
+
+**Architecture:**
+```
+Before Image (S3) + After Image (S3) → Lambda →
+Both images sent to Amazon Bedrock (Claude 3 Sonnet Vision) →
+Validation Score + Assessment → Update DynamoDB task
+```
+
+**Bedrock Vision Prompt (Before/After Comparison):**
+```python
+prompt = """
+You are a sanitation inspection AI. Compare these two photos of the same location.
+
+Image 1 (BEFORE): Shows the area before cleanup.
+Image 2 (AFTER): Shows the area after the sanitation worker's cleanup.
+
+Analyze and return JSON:
+{
+  "waste_reduction_percent": integer,  // 0-100 estimated reduction
+  "validation_status": string,         // "approved", "partial", "rejected"
+  "same_location": boolean,            // do both images appear to be the same place?
+  "assessment": string,                // 2-3 sentence explanation
+  "suspicious": boolean                // true if photos seem staged or fake
 }
 
-def calculate_urgency_adjustment(transcript, sentiment):
-    score = 0
-    for keyword, weight in URGENCY_KEYWORDS.items():
-        if keyword in transcript.lower():
-            score += weight
-    
-    if sentiment == "NEGATIVE":
-        score += 1
-    
-    return min(score, 3)  # Max +3 to severity
+Rules:
+- "approved": waste_reduction_percent >= 70
+- "partial": waste_reduction_percent 40-69 (needs re-cleanup)
+- "rejected": waste_reduction_percent < 40 or suspicious = true
+"""
 ```
 
-### 7.3 Before-After Validation Pipeline
+**Why Bedrock over Custom Semantic Segmentation:**
+1. **Zero training data** — no need for 10,000+ labeled before/after pairs
+2. **Contextual reasoning** — can detect if photos are staged, wrong angle, or different location
+3. **Natural language assessment** — provides human-readable explanation for workers and authorities
+4. **Single API call** — replaces entire TensorFlow pipeline
 
-**Objective:** Verify actual cleanup occurred
-
-**Architecture:**
-```
-Before Image + After Image → Semantic Segmentation Model → 
-Waste Detection → Area Calculation → Comparison → Validation Score
-```
-
-**Custom ML Model:**
-- **Framework:** TensorFlow 2.x with DeepLab v3+ architecture
-- **Training Data:** 10,000+ before-after image pairs
-- **Output:** Pixel-wise segmentation mask (waste vs. background)
-
-**Validation Algorithm:**
+**Validation Algorithm (with GPS check):**
 ```python
-def validate_cleanup(before_image, after_image, gps_before, gps_after):
+def validate_cleanup(before_image_s3, after_image_s3, gps_before, gps_after):
     # Step 1: GPS proximity check
-    distance = calculate_distance(gps_before, gps_after)
+    distance = haversine(gps_before, gps_after)
     if distance > 20:  # meters
-        return {"valid": False, "reason": "Location mismatch"}
+        return {"valid": False, "reason": "Location mismatch", "distance": distance}
     
-    # Step 2: Semantic segmentation
-    before_mask = segmentation_model.predict(before_image)
-    after_mask = segmentation_model.predict(after_image)
+    # Step 2: Bedrock Vision comparison
+    before_b64 = get_image_base64_from_s3(before_image_s3)
+    after_b64 = get_image_base64_from_s3(after_image_s3)
     
-    # Step 3: Calculate waste area
-    before_waste_pixels = np.sum(before_mask == WASTE_CLASS)
-    after_waste_pixels = np.sum(after_mask == WASTE_CLASS)
+    bedrock_result = invoke_bedrock_vision(
+        images=[before_b64, after_b64],
+        prompt=VALIDATION_PROMPT
+    )
     
-    # Step 4: Calculate reduction percentage
-    reduction = (before_waste_pixels - after_waste_pixels) / before_waste_pixels * 100
-    
-    # Step 5: Validation decision
-    if reduction >= 70:
-        return {"valid": True, "score": reduction, "status": "approved"}
-    elif reduction >= 40:
-        return {"valid": False, "score": reduction, "status": "partial", 
-                "reason": "Incomplete cleanup"}
-    else:
-        return {"valid": False, "score": reduction, "status": "rejected",
-                "reason": "Insufficient cleanup or fake photo"}
+    # Step 3: Return structured result
+    return {
+        "valid": bedrock_result['validation_status'] == 'approved',
+        "score": bedrock_result['waste_reduction_percent'],
+        "status": bedrock_result['validation_status'],
+        "assessment": bedrock_result['assessment'],
+        "suspicious": bedrock_result['suspicious']
+    }
 ```
 
-**Model Deployment:**
-- Hosted on Amazon SageMaker Endpoint
-- Instance type: ml.t3.medium
-- Auto-scaling: 1-5 instances based on load
-- Inference time: < 5 seconds per comparison
+### 7.4 Epidemic Prediction Pipeline (RAG via Amazon Bedrock Knowledge Base)
 
-### 7.4 Epidemic Prediction Pipeline
-
-**Objective:** Predict disease outbreak risk based on sanitation data
+**Objective:** Generate context-grounded disease outbreak risk advisories using Retrieval-Augmented Generation
 
 **Architecture:**
 ```
-Historical Reports + Disease Data → Feature Engineering → 
-ML Model (XGBoost) → Risk Score → Hotspot Identification → Alerts
+DynamoDB reports (clustered by geohash) → Lambda detects hotspot →
+Assemble context (report count, severity, categories, location) →
+Query Amazon Bedrock Knowledge Base (RAG) →
+Titan Embeddings retrieve relevant health documents →
+Claude 3 Sonnet generates grounded risk advisory →
+Store advisory in DynamoDB → Display on Authority Dashboard
 ```
 
-**Features:**
-1. **Spatial Features:**
-   - Report density (reports per km²)
-   - Proximity to water bodies
-   - Proximity to residential areas
-   - Elevation data
+**Knowledge Base Setup:**
+1. **Source Documents (stored in S3):**
+   - WHO sanitation and disease correlation guidelines
+   - India-specific vector-borne disease data (Dengue, Malaria, Cholera)
+   - Municipal health department guidelines
+   - Seasonal outbreak patterns
 
-2. **Temporal Features:**
-   - Days since last cleanup
-   - Seasonal patterns (monsoon, summer)
-   - Historical outbreak dates
+2. **Embeddings:** Amazon Titan Text Embeddings V2
+3. **Vector Store:** Amazon OpenSearch Serverless (managed by Bedrock KB)
+4. **Chunking Strategy:** Fixed-size 512 tokens with 20% overlap
 
-3. **Sanitation Features:**
-   - Average severity score
-   - Category distribution (bio-hazards weighted higher)
-   - Repeat complaint frequency
-
-**Model:**
-- **Algorithm:** XGBoost Classifier
-- **Target:** Binary classification (outbreak risk: yes/no)
-- **Training Data:** Historical sanitation + disease outbreak data (3-5 years)
-- **Features:** 20+ engineered features
-- **Evaluation Metric:** F1-score (balance precision and recall)
-
-**Risk Scoring:**
+**RAG Query Flow:**
 ```python
-def calculate_disease_risk(location, radius=100):
-    # Get reports in area
-    reports = get_reports_in_radius(location, radius, days=30)
+def generate_epidemic_advisory(hotspot_data):
+    context = f"""
+    Hotspot Analysis for Zone {hotspot_data['geohash']}:
+    - Total reports in last 30 days: {hotspot_data['report_count']}
+    - Average severity: {hotspot_data['avg_severity']}/10
+    - Categories: {hotspot_data['category_breakdown']}
+    - Stagnant water reports: {hotspot_data['water_reports']}
+    - Current season: {hotspot_data['season']}
+    - Proximity to residential areas: {hotspot_data['residential_proximity']}
+    """
     
-    # Feature extraction
-    features = {
-        'report_density': len(reports) / (math.pi * radius**2),
-        'avg_severity': np.mean([r.severity for r in reports]),
-        'bio_hazard_count': sum([1 for r in reports if r.category in BIO_HAZARDS]),
-        'days_since_cleanup': min([r.days_pending for r in reports]),
-        'proximity_to_water': get_water_proximity(location),
-        'season': get_current_season(),
-        'historical_outbreaks': get_outbreak_history(location)
+    response = bedrock_agent.retrieve_and_generate(
+        knowledgeBaseId=KB_ID,
+        input={
+            "text": f"""
+            Based on the following sanitation data and your knowledge of 
+            disease-sanitation correlations, generate a health risk advisory.
+            
+            {context}
+            
+            Provide:
+            1. Overall risk level (Low/Medium/High/Critical)
+            2. Specific disease risks (Dengue, Malaria, Cholera, etc.)
+            3. Recommended preventive actions
+            4. Urgency of response needed
+            """
+        }
+    )
+    
+    return {
+        "risk_level": parse_risk_level(response),
+        "advisory_text": response['output']['text'],
+        "sources": response.get('citations', []),
+        "generated_at": datetime.utcnow().isoformat()
     }
-    
-    # Model prediction
-    risk_probability = epidemic_model.predict_proba(features)[0][1]
-    
-    # Risk level classification
-    if risk_probability > 0.8:
-        return {"level": "critical", "score": risk_probability * 100}
-    elif risk_probability > 0.6:
-        return {"level": "high", "score": risk_probability * 100}
-    elif risk_probability > 0.4:
-        return {"level": "medium", "score": risk_probability * 100}
-    else:
-        return {"level": "low", "score": risk_probability * 100}
 ```
+
+**Why RAG over Custom ML (XGBoost/SciKit-Learn):**
+1. **No training data needed** — leverages existing health literature
+2. **Grounded in facts** — RAG retrieves real medical data, preventing hallucination
+3. **Explainable** — citations show which health documents informed the advisory
+4. **Adaptable** — add new documents to KB without retraining
+5. **Human-readable output** — generates natural language advisories, not just scores
 
 **Scheduled Execution:**
-- Run daily at 2 AM
-- Update hotspot risk scores
-- Send alerts for new high-risk zones
-- Generate weekly risk reports
+- Lambda runs daily at 2 AM IST
+- Scans DynamoDB for geographic clusters (5+ reports, geohash prefix match)
+- Generates advisory for each identified hotspot
+- Stores in DynamoDB with TTL of 7 days
+- Triggers SNS notification for Critical risk zones
 
 ---
 

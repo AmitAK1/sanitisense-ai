@@ -13,13 +13,15 @@
 
 | Aspect | Detail |
 |--------|--------|
-| **Core Innovation** | Triple-Lock Mechanism: AI Verification + Route Optimization + Epidemic Prediction |
+| **Core Innovation** | Triple-Lock Mechanism: AI Verification (Bedrock) + Route Optimization + Epidemic Prediction (RAG) |
 | **Target Users** | 3 stakeholders: Citizens (reporters), Workers (field operators), Authorities (decision-makers) |
 | **Languages Supported** | 7 Indian languages covering 80%+ population (Hindi, English, Marathi, Tamil, Telugu, Bengali, Gujarati) |
+| **Generative AI** | Amazon Bedrock (Claude 3 Sonnet — Vision + Text), Bedrock Knowledge Base + Titan Embeddings (RAG) |
 | **Key Impact Metrics** | 30% fuel savings, 40% time savings, 90%+ validation accuracy, 50% reduction in repeat complaints |
 | **Implementation Timeline** | 3-week prototype → 3-month MVP → 12-month city-wide rollout |
 | **Cost Efficiency** | ₹1.20-₹1.50 per resolved ticket (optimized), 2-3 month break-even for pilot ward |
-| **Accessibility** | Zero-literacy design, offline-first, works on low-end devices (2GB RAM, Android 8.0+) |
+| **Accessibility** | Zero-literacy design, offline-capable, works on low-end devices (2GB RAM, Android 8.0+) |
+| **AWS Services** | Bedrock, Lambda, API Gateway, DynamoDB, S3, Amplify, Rekognition, Transcribe, CloudWatch |
 | **AI Accuracy Targets** | 95%+ spam detection, 85%+ severity classification, 90%+ cleanup validation |
 
 ---
@@ -53,6 +55,8 @@ This solution is timely and relevant due to several converging factors:
    - Government push for digital civic services
 
 4. **AI/ML Technology Maturity**
+   - Amazon Bedrock provides foundation models (Claude 3 Sonnet) with vision + text capabilities
+   - RAG workflows (Bedrock Knowledge Base + Titan Embeddings) enable grounded epidemic predictions
    - AWS AI services (Rekognition, Transcribe) now support Indian languages
    - Cost-effective cloud infrastructure
    - Proven success of AI in civic tech globally

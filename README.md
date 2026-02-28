@@ -109,27 +109,26 @@ A Civic Operating System that transforms urban sanitation management through AI-
 ## 🛠️ Technology Stack
 
 ### Frontend
-- **Flutter 3.x** - Citizen & Worker mobile apps (Android 8.0+)
-- **React 18 + TypeScript** - Authority web dashboard
-- **Material Design 3** - UI framework
+- **React 18 + Next.js 14 + TypeScript** - Responsive web app (Citizen, Worker, Authority views)
+- **Tailwind CSS + shadcn/ui** - UI framework
+- **Leaflet.js / Mapbox GL** - Interactive maps
 
 ### Backend & Cloud (AWS)
-- **AWS Lambda** (Node.js 18) - Serverless compute
+- **AWS Lambda** (Python 3.12) - Serverless compute
 - **Amazon API Gateway** - RESTful API management
-- **Amazon RDS** (PostgreSQL 14 + PostGIS) - Spatial database
-- **Amazon S3** - Photo/audio storage
-- **Amazon ElastiCache** (Redis) - Caching layer
+- **Amazon DynamoDB** - Serverless NoSQL database
+- **Amazon S3** - Photo/audio storage + RAG document store
+- **AWS Amplify** - Frontend deployment with live URL
 
-### AI/ML Services (AWS)
-- **Amazon Rekognition Custom Labels** - Image classification (95%+ accuracy)
-- **Amazon Transcribe** - Multi-language speech-to-text (7 languages)
-- **Amazon Comprehend** - NLP for urgency extraction
-- **Amazon SageMaker** - Custom ML model training (TensorFlow/PyTorch)
+### Generative AI Services (AWS) — CORE
+- **Amazon Bedrock (Claude 3 Sonnet)** - Multi-modal foundation model: image classification, severity scoring, before/after validation, urgency extraction, report generation
+- **Amazon Bedrock Knowledge Base** - RAG workflow for epidemic risk advisories grounded in health literature
+- **Amazon Titan Text Embeddings V2** - Vector embeddings for Knowledge Base
+- **Amazon Rekognition** - Supplementary image label detection with confidence scores
+- **Amazon Transcribe** - Multi-language speech-to-text (7 Indian languages)
 
-### Optimization & Analytics
-- **Google OR-Tools** - Vehicle Routing Problem (VRP) solver
-- **Google Maps SDK** - Navigation and mapping
-- **PostGIS** - Geospatial queries and clustering
+### Monitoring
+- **Amazon CloudWatch** - Logging, metrics, and alarms
 
 ---
 
@@ -138,33 +137,40 @@ A Civic Operating System that transforms urban sanitation management through AI-
 ```
 ┌─────────────────────────────────────────────────────┐
 │         PRESENTATION LAYER                           │
-│  Citizen App | Worker App | Authority Dashboard     │
-│  (Flutter)   | (Flutter)  | (React.js)              │
+│  Citizen View | Worker View | Authority Dashboard    │
+│  (React/Next.js — deployed on AWS Amplify)           │
 └─────────────────────────────────────────────────────┘
                         ↓
 ┌─────────────────────────────────────────────────────┐
 │         API GATEWAY LAYER                            │
-│         AWS API Gateway + JWT Auth                   │
+│         Amazon API Gateway + Auth                    │
 └─────────────────────────────────────────────────────┘
                         ↓
 ┌─────────────────────────────────────────────────────┐
-│         BUSINESS LOGIC LAYER                         │
-│  Report Processing | Route Optimization | Analytics │
-│  (AWS Lambda)      | (Google OR-Tools)  | (SageMaker)│
+│         BUSINESS LOGIC LAYER (Serverless)             │
+│  Report Processing | Task Management | Analytics     │
+│  (AWS Lambda — Python 3.12)                          │
 └─────────────────────────────────────────────────────┘
                         ↓
 ┌─────────────────────────────────────────────────────┐
-│         AI/ML SERVICES LAYER                         │
-│  Rekognition | Transcribe | Custom TensorFlow Models│
+│         GENERATIVE AI SERVICES LAYER                  │
+│  Amazon Bedrock (Claude 3 Sonnet — Vision + Text)    │
+│  Bedrock Knowledge Base + Titan Embeddings (RAG)     │
+│  Amazon Rekognition | Amazon Transcribe               │
 └─────────────────────────────────────────────────────┘
                         ↓
 ┌─────────────────────────────────────────────────────┐
-│         DATA LAYER                                   │
-│  Amazon RDS | Amazon S3 | ElastiCache (Redis)       │
+│         DATA LAYER                                    │
+│  Amazon DynamoDB | Amazon S3 (Media + RAG Docs)      │
 └─────────────────────────────────────────────────────┘
 ```
 
-**See [design.md](design.md) for detailed architecture diagrams and data flow.**
+**Generative AI Integration Explained:**
+- **Amazon Bedrock (Claude 3 Sonnet):** Core intelligence — single foundation model handles image classification, severity scoring, before/after validation, urgency extraction, and report generation
+- **Bedrock Knowledge Base (RAG):** Epidemic risk advisories are grounded in real health literature (WHO guidelines, disease correlation data) via Retrieval-Augmented Generation
+- **Why GenAI is required:** Replaces 5+ custom ML models with one foundation model; understands Indian context and code-mixed languages; zero training data needed
+
+**See [design.md](design.md) for detailed architecture diagrams, Bedrock prompts, and data flow.**
 
 ---
 
@@ -302,29 +308,40 @@ This repository contains comprehensive technical documentation:
 
 ### Prerequisites
 - Node.js 18+
-- Flutter 3.x
-- AWS Account
-- PostgreSQL 14+
+- Python 3.12+
+- AWS Account with Bedrock model access enabled (Claude 3 Sonnet + Titan Embeddings)
+- AWS CLI configured
 
 ### Installation
 
 ```bash
 # Clone the repository
-git clone https://github.com/[your-username]/sanitisense-ai.git
+git clone https://github.com/AmitAK1/sanitisense-ai.git
 cd sanitisense-ai
 
-# Install dependencies
+# Install frontend dependencies
+cd frontend
 npm install
 
 # Set up environment variables
-cp .env.example .env
-# Edit .env with your AWS credentials
+cp .env.example .env.local
+# Edit .env.local with your API Gateway endpoint URL
 
 # Run development server
 npm run dev
 ```
 
-**Note:** Detailed setup instructions will be added post-hackathon during Phase 1 implementation.
+### AWS Deployment
+```bash
+# Deploy backend (Lambda + API Gateway + DynamoDB)
+cd backend
+sam build && sam deploy --guided
+
+# Deploy frontend to Amplify
+# Connect GitHub repo in AWS Amplify Console
+```
+
+**Note:** Ensure Amazon Bedrock model access is enabled for Claude 3 Sonnet and Titan Embeddings in your AWS region.
 
 ---
 
