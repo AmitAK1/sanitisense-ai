@@ -1,111 +1,330 @@
 """
 SanitiSense AI — Report Processor Lambda
-Handles new citizen report submissions.
-Trigger: POST /reports via API Gateway
+POST /reports  — citizen submits a report
+GET  /reports  — list all reports
+GET  /reports/{ticket_id} — single report
+
+IMPORTANT — this is synchronous (NOT async SQS).
+The frontend waits for the AI result so it can show the citizen
+their ticket ID + what kind of problem was detected.
+
+Flow:
+  1. Frontend already uploaded photo to S3 via GET /upload-url
+  2. Frontend calls POST /reports { image_key, latitude, longitude }
+  3. This Lambda calls Bedrock (via image_analyzer) to get REAL AI result
+  4. If spam → reject with 400
+  5. If real issue → save report + auto-create task → return ticket_id + ai_analysis
+
+DynamoDB schema (must match the seeded 'SanitiSense' table):
+  PK = REPORT#{ticket_id}   SK = META
 """
 
 import json
-import uuid
 import os
+import uuid
 from datetime import datetime
+from decimal import Decimal
 
 import boto3
+from boto3.dynamodb.conditions import Attr
+
+# ── AWS clients ─────────────────────────────────────────────────────────────
 dynamodb = boto3.resource('dynamodb', region_name=os.environ.get('AWS_REGION', 'us-east-1'))
-table = dynamodb.Table(os.environ.get('DYNAMODB_TABLE', 'sanitisense-main'))
+table = dynamodb.Table(os.environ.get('TABLE_NAME', 'SanitiSense'))
+
+S3_BUCKET = os.environ.get('S3_BUCKET', 'sanitisense-media-982253889131')
+BEDROCK_MODEL_ID = os.environ.get('BEDROCK_MODEL_ID', 'us.anthropic.claude-sonnet-4-20250514-v1:0')
 
 
-def generate_ticket_id():
-    """Generate a unique ticket ID like SAN123456"""
+def generate_ticket_id() -> str:
+    """
+    Generate a unique ticket ID.
+    Format: SAN + 6 uppercase hex chars  →  e.g. SAN4A2F1B
+    """
     return f"SAN{uuid.uuid4().hex[:6].upper()}"
 
 
+def _response(status_code: int, body: dict) -> dict:
+    """Build a standard API Gateway response with CORS headers."""
+    return {
+        'statusCode': status_code,
+        'headers': {
+            'Content-Type': 'application/json',
+            'Access-Control-Allow-Origin': '*',
+        },
+        'body': json.dumps(body, default=str),
+    }
+
+
+def _now() -> str:
+    return datetime.utcnow().isoformat() + 'Z'
+
+
+def _priority_from_severity(severity: int) -> tuple:
+    """Map severity score (1-10) to priority label and SLA hours."""
+    if severity >= 8:
+        return 'critical', 4
+    elif severity >= 6:
+        return 'high', 12
+    elif severity >= 4:
+        return 'medium', 24
+    return 'low', 48
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# AI — call Bedrock directly (synchronous, same process)
+# ─────────────────────────────────────────────────────────────────────────────
+
+CLASSIFICATION_PROMPT = """Analyze this photo taken by a citizen reporting a sanitation issue in an Indian city.
+
+Return ONLY a valid JSON object with exactly these fields:
+{
+  "is_spam": boolean,
+  "category": "garbage_pile" | "overflowing_drain" | "blocked_sewer" | "stagnant_water" | "medical_waste" | "animal_carcass" | "other",
+  "severity_score": integer 1-10,
+  "description": "2-3 sentence human-readable description of the issue",
+  "health_risk": "none" | "low" | "medium" | "high",
+  "confidence": float 0.0-1.0
+}
+
+Severity guide:
+- 1-3: Minor litter, small debris
+- 4-6: Moderate accumulation, partial drain blockage
+- 7-8: Large garbage piles, fully blocked drains, stagnant water
+- 9-10: Bio-hazards, medical waste, dead animals, contaminated water near residences
+
+If the image is NOT a sanitation issue (selfie, food, random photo), set is_spam=true and severity_score=0.
+Return ONLY the JSON object, no other text."""
+
+
+def analyze_image_from_s3(image_key: str) -> dict:
+    """
+    Pull image from S3, send to Bedrock Claude for classification.
+    Returns the AI analysis dict.
+    """
+    import base64
+
+    # Get image bytes from S3
+    s3 = boto3.client('s3', region_name=os.environ.get('AWS_REGION', 'us-east-1'))
+    response = s3.get_object(Bucket=S3_BUCKET, Key=image_key)
+    image_bytes = response['Body'].read()
+
+    # Detect media type from key extension
+    ext = image_key.rsplit('.', 1)[-1].lower()
+    media_type_map = {'jpg': 'image/jpeg', 'jpeg': 'image/jpeg',
+                      'png': 'image/png', 'webp': 'image/webp', 'heic': 'image/jpeg'}
+    media_type = media_type_map.get(ext, 'image/jpeg')
+
+    # Call Bedrock
+    bedrock = boto3.client('bedrock-runtime', region_name=os.environ.get('AWS_REGION', 'us-east-1'))
+    image_b64 = base64.b64encode(image_bytes).decode('utf-8')
+
+    request_body = {
+        'anthropic_version': 'bedrock-2023-05-31',
+        'max_tokens': 512,
+        'messages': [{
+            'role': 'user',
+            'content': [
+                {'type': 'image', 'source': {
+                    'type': 'base64',
+                    'media_type': media_type,
+                    'data': image_b64
+                }},
+                {'type': 'text', 'text': CLASSIFICATION_PROMPT}
+            ]
+        }]
+    }
+
+    bedrock_response = bedrock.invoke_model(
+        modelId=BEDROCK_MODEL_ID,
+        contentType='application/json',
+        body=json.dumps(request_body)
+    )
+    result = json.loads(bedrock_response['body'].read())
+    return json.loads(result['content'][0]['text'])
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# POST /reports — create a new report and auto-create its task
+# ─────────────────────────────────────────────────────────────────────────────
+
+def create_report(body: dict) -> dict:
+    """
+    Main report creation logic:
+    1. Call Bedrock AI with the S3 image
+    2. Reject spam
+    3. Save report to DynamoDB
+    4. Auto-create a Task record for this report
+    5. Return ticket_id + ai_analysis to the frontend
+    """
+    image_key = body.get('image_key', '')
+    latitude = float(body.get('latitude', 0))
+    longitude = float(body.get('longitude', 0))
+    voice_key = body.get('voice_key', '')
+    ward_number = int(body.get('ward_number', 0))
+
+    if not image_key:
+        raise ValueError("image_key is required")
+
+    # ── Step 1: Real AI classification ────────────────────────────────────
+    ai_analysis = analyze_image_from_s3(image_key)
+
+    # ── Step 2: Reject spam ────────────────────────────────────────────────
+    if ai_analysis.get('is_spam', False):
+        return {
+            'ticket_id': None,
+            'status': 'rejected',
+            'reason': 'Image does not appear to show a sanitation issue.',
+            'ai_analysis': ai_analysis,
+        }
+
+    # ── Step 3: Save report ────────────────────────────────────────────────
+    ticket_id = generate_ticket_id()
+    now = _now()
+
+    report = {
+        'PK': f'REPORT#{ticket_id}',
+        'SK': 'META',
+        'ticket_id': ticket_id,
+        'image_key': image_key,
+        'voice_key': voice_key,
+        'latitude': Decimal(str(round(latitude, 6))),
+        'longitude': Decimal(str(round(longitude, 6))),
+        'ward_number': ward_number,
+        'category': ai_analysis['category'],
+        'severity_score': ai_analysis['severity_score'],
+        'description': ai_analysis['description'],
+        'health_risk': ai_analysis['health_risk'],
+        'is_spam': False,
+        'ai_confidence': Decimal(str(round(ai_analysis.get('confidence', 0), 4))),
+        'status': 'pending',
+        'created_at': now,
+        'updated_at': now,
+        # GSI1 so dashboard can query by status
+        'GSI1PK': 'STATUS#pending',
+        'GSI1SK': now,
+    }
+    table.put_item(Item=report)
+
+    # ── Step 4: Auto-create Task ───────────────────────────────────────────
+    priority, sla_hours = _priority_from_severity(ai_analysis['severity_score'])
+    task_id = f"TSK-{datetime.utcnow().strftime('%y%m%d')}-{uuid.uuid4().hex[:6].upper()}"
+
+    task = {
+        'PK': f'TASK#{task_id}',
+        'SK': 'META',
+        'task_id': task_id,
+        'report_ticket': ticket_id,
+        'image_key': image_key,          # before-photo key (needed for validation)
+        'after_image_key': '',
+        'status': 'pending',
+        'priority': priority,
+        'sla_hours': sla_hours,
+        'category': ai_analysis['category'],
+        'severity_score': ai_analysis['severity_score'],
+        'health_risk': ai_analysis['health_risk'],
+        'description': ai_analysis['description'],
+        'ward_number': ward_number,
+        'latitude': Decimal(str(round(latitude, 6))),  # Decimal required by DynamoDB
+        'longitude': Decimal(str(round(longitude, 6))),
+        'assigned_worker_id': None,
+        'worker_notes': '',
+        'created_at': now,
+        'updated_at': now,
+        'GSI1PK': 'STATUS#pending',
+        'GSI1SK': now,
+    }
+    table.put_item(Item=task)
+
+    # ── Step 5: Return to frontend ─────────────────────────────────────────
+    return {
+        'ticket_id': ticket_id,
+        'status': 'pending',
+        'ai_analysis': ai_analysis,
+        'message': 'Report submitted successfully',
+    }
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# GET /reports — list all reports (with optional ward filter)
+# ─────────────────────────────────────────────────────────────────────────────
+
+def list_reports(query_params: dict) -> list:
+    limit = min(int(query_params.get('limit', 50)), 100)
+    status_filter = query_params.get('status', '')
+    ward_filter = query_params.get('ward', '')
+
+    filter_expr = Attr('SK').eq('META') & Attr('PK').begins_with('REPORT#')
+    if status_filter:
+        filter_expr = filter_expr & Attr('status').eq(status_filter)
+    if ward_filter:
+        filter_expr = filter_expr & Attr('ward_number').eq(int(ward_filter))
+
+    response = table.scan(FilterExpression=filter_expr, Limit=limit * 3)
+    items = response.get('Items', [])
+    items.sort(key=lambda x: x.get('created_at', ''), reverse=True)
+    return items[:limit]
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# GET /reports/{ticket_id} — get a single report
+# ─────────────────────────────────────────────────────────────────────────────
+
+def get_report(ticket_id: str) -> dict | None:
+    response = table.get_item(Key={'PK': f'REPORT#{ticket_id}', 'SK': 'META'})
+    return response.get('Item')
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Handler — route by HTTP method + path
+# ─────────────────────────────────────────────────────────────────────────────
+
 def handler(event, context):
-    """
-    Lambda handler for processing new citizen reports.
-    
-    Expected event body (JSON):
-    {
-        "image_key": "citizen-reports/2026/02/28/abc123.jpg",
-        "latitude": 19.0760,
-        "longitude": 72.8777,
-        "voice_key": "citizen-reports/2026/02/28/abc123.webm"  (optional)
-    }
-    """
     try:
-        # Parse input
-        body = json.loads(event.get('body', '{}'))
-        image_key = body.get('image_key', '')
-        latitude = body.get('latitude', 0)
-        longitude = body.get('longitude', 0)
-        voice_key = body.get('voice_key', '')
+        method = event.get('httpMethod', 'POST')
+        path = event.get('path', '/reports')
+        path_params = event.get('pathParameters') or {}
+        query_params = event.get('queryStringParameters') or {}
+        body = json.loads(event.get('body', '{}')) if event.get('body') else {}
 
-        # Generate ticket ID
-        ticket_id = generate_ticket_id()
+        # POST /reports
+        if method == 'POST' and path.rstrip('/') == '/reports':
+            result = create_report(body)
+            status = 400 if result.get('status') == 'rejected' else 200
+            return _response(status, result)
 
-        # TODO: Call image_analyzer to get AI classification
-        # For now, return mock analysis
-        ai_analysis = {
-            "is_spam": False,
-            "category": "garbage_pile",
-            "severity_score": 7,
-            "description": "Moderate garbage accumulation near residential area. Mixed waste including plastic and organic materials visible.",
-            "health_risk": "medium",
-            "confidence": 0.89
-        }
+        # GET /reports/{ticket_id}
+        elif method == 'GET' and path_params.get('ticket_id'):
+            ticket_id = path_params['ticket_id'].upper()
+            report = get_report(ticket_id)
+            if report is None:
+                return _response(404, {'error': f'Ticket {ticket_id} not found'})
+            return _response(200, report)
 
-        # Build report record
-        report = {
-            "pk": f"REPORT#{ticket_id}",
-            "sk": "METADATA",
-            "ticket_id": ticket_id,
-            "image_key": image_key,
-            "voice_key": voice_key,
-            "latitude": str(latitude),
-            "longitude": str(longitude),
-            "category": ai_analysis["category"],
-            "severity_score": ai_analysis["severity_score"],
-            "description": ai_analysis["description"],
-            "health_risk": ai_analysis["health_risk"],
-            "is_spam": ai_analysis["is_spam"],
-            "status": "pending",
-            "created_at": datetime.utcnow().isoformat() + "Z",
-        }
+        # GET /reports
+        elif method == 'GET' and '/reports' in path:
+            reports = list_reports(query_params)
+            return _response(200, {'reports': reports, 'count': len(reports)})
 
-        table.put_item(Item=report)
+        return _response(404, {'error': 'Route not found'})
 
-        return {
-            "statusCode": 201,
-            "headers": {
-                "Content-Type": "application/json",
-                "Access-Control-Allow-Origin": "*"
-            },
-            "body": json.dumps({
-                "ticket_id": ticket_id,
-                "status": "pending",
-                "ai_analysis": ai_analysis,
-                "message": "Report submitted successfully"
-            })
-        }
-
+    except ValueError as e:
+        return _response(400, {'error': str(e)})
     except Exception as e:
-        return {
-            "statusCode": 500,
-            "headers": {
-                "Content-Type": "application/json",
-                "Access-Control-Allow-Origin": "*"
-            },
-            "body": json.dumps({"error": str(e)})
-        }
+        return _response(500, {'error': str(e)})
 
 
-# Local testing
-if __name__ == "__main__":
-    test_event = {
-        "body": json.dumps({
-            "image_key": "citizen-reports/2026/02/28/test.jpg",
-            "latitude": 19.0760,
-            "longitude": 72.8777
-        })
-    }
-    result = handler(test_event, None)
-    print(json.dumps(json.loads(result["body"]), indent=2))
+# ─── Local smoke test (tests what doesn't need AWS) ─────────────────────────
+if __name__ == '__main__':
+    print("Testing generate_ticket_id()...")
+    for _ in range(5):
+        tid = generate_ticket_id()
+        assert tid.startswith('SAN') and len(tid) == 9
+    print(f"  Sample: {generate_ticket_id()} ✓")
+
+    print("Testing _priority_from_severity()...")
+    assert _priority_from_severity(9) == ('critical', 4)
+    assert _priority_from_severity(5) == ('medium', 24)
+    print("  ✓")
+
+    print("\nSmoke tests passed. Full handler requires real AWS + S3 image.")

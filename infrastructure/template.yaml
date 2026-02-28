@@ -4,8 +4,12 @@ Description: SanitiSense AI — Backend Infrastructure (SAM Template)
 
 # ============================================
 # HOW TO DEPLOY:
+#   cd infrastructure
 #   sam build
-#   sam deploy --guided
+#   sam deploy --no-confirm-changeset
+#
+# To deploy for the first time:
+#   sam build && sam deploy --guided
 # ============================================
 
 Globals:
@@ -18,11 +22,11 @@ Globals:
         TABLE_NAME: SanitiSense
         S3_BUCKET: sanitisense-media-982253889131
         BEDROCK_MODEL_ID: us.anthropic.claude-sonnet-4-20250514-v1:0
-        KNOWLEDGE_BASE_ID: YOUR_KB_ID  # TODO: replace after creating KB
+        KNOWLEDGE_BASE_ID: YOUR_KB_ID   # TODO: replace after creating KB in Bedrock console
 
 Resources:
 
-  # ========== API GATEWAY ==========
+  # ── API Gateway ────────────────────────────────────────────────────────────
   SanitiSenseApi:
     Type: AWS::Serverless::Api
     Properties:
@@ -32,12 +36,32 @@ Resources:
         AllowHeaders: "'Content-Type,Authorization'"
         AllowOrigin: "'*'"
 
-  # ========== LAMBDA FUNCTIONS ==========
+  # ── Lambda: get_upload_url — S3 presigned URL (CRITICAL — frontend needs this first) ──
+  UploadUrlFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ../backend/lambdas/
+      Handler: get_upload_url.handler
+      Timeout: 5           # Should complete in < 1s
+      Events:
+        GetUploadUrl:
+          Type: Api
+          Properties:
+            RestApiId: !Ref SanitiSenseApi
+            Path: /upload-url
+            Method: get
+      Policies:
+        - S3CrudPolicy:
+            BucketName: sanitisense-media-982253889131
+
+  # ── Lambda: report_processor — citizen submits report (synchronous AI) ─────
   ReportProcessorFunction:
     Type: AWS::Serverless::Function
     Properties:
       CodeUri: ../backend/lambdas/
       Handler: report_processor.handler
+      Timeout: 60           # Bedrock needs up to 30s; give buffer
+      MemorySize: 512
       Events:
         PostReport:
           Type: Api
@@ -45,12 +69,31 @@ Resources:
             RestApiId: !Ref SanitiSenseApi
             Path: /reports
             Method: post
+        GetReports:
+          Type: Api
+          Properties:
+            RestApiId: !Ref SanitiSenseApi
+            Path: /reports
+            Method: get
+        GetReport:
+          Type: Api
+          Properties:
+            RestApiId: !Ref SanitiSenseApi
+            Path: /reports/{ticket_id}
+            Method: get
       Policies:
         - DynamoDBCrudPolicy:
             TableName: SanitiSense
-        - S3CrudPolicy:
+        - S3ReadPolicy:
             BucketName: sanitisense-media-982253889131
+        - Statement:
+            - Effect: Allow
+              Action:
+                - bedrock:InvokeModel
+                - rekognition:DetectLabels
+              Resource: '*'
 
+  # ── Lambda: image_analyzer — direct image analysis (POST /analyze) ─────────
   ImageAnalyzerFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -74,31 +117,40 @@ Resources:
             - Effect: Allow
               Action:
                 - bedrock:InvokeModel
-              Resource: '*'
-        - Statement:
-            - Effect: Allow
-              Action:
                 - rekognition:DetectLabels
               Resource: '*'
 
+  # ── Lambda: task_manager — worker CRUD + worker profile ───────────────────
   TaskManagerFunction:
     Type: AWS::Serverless::Function
     Properties:
       CodeUri: ../backend/lambdas/
       Handler: task_manager.handler
       Events:
-        CreateTask:
-          Type: Api
-          Properties:
-            RestApiId: !Ref SanitiSenseApi
-            Path: /tasks
-            Method: post
         GetTasks:
           Type: Api
           Properties:
             RestApiId: !Ref SanitiSenseApi
             Path: /tasks
             Method: get
+        CreateTask:
+          Type: Api
+          Properties:
+            RestApiId: !Ref SanitiSenseApi
+            Path: /tasks
+            Method: post
+        StartTask:
+          Type: Api
+          Properties:
+            RestApiId: !Ref SanitiSenseApi
+            Path: /tasks/{task_id}/start
+            Method: post
+        CompleteTask:
+          Type: Api
+          Properties:
+            RestApiId: !Ref SanitiSenseApi
+            Path: /tasks/{task_id}/complete
+            Method: post
         UpdateTask:
           Type: Api
           Properties:
@@ -111,10 +163,17 @@ Resources:
             RestApiId: !Ref SanitiSenseApi
             Path: /worker/{worker_id}/tasks
             Method: get
+        GetWorkerProfile:
+          Type: Api
+          Properties:
+            RestApiId: !Ref SanitiSenseApi
+            Path: /worker/{worker_id}/profile
+            Method: get
       Policies:
         - DynamoDBCrudPolicy:
             TableName: SanitiSense
 
+  # ── Lambda: validation — AI before/after photo comparison ─────────────────
   ValidationFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -140,6 +199,7 @@ Resources:
                 - bedrock:InvokeModel
               Resource: '*'
 
+  # ── Lambda: epidemic_advisor — AI health risk advisory ─────────────────────
   EpidemicAdvisorFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -170,6 +230,7 @@ Resources:
                 - bedrock:Retrieve
               Resource: '*'
 
+  # ── Lambda: dashboard_api — stats + heatmap + ward reports ────────────────
   DashboardApiFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -212,17 +273,25 @@ Resources:
             RestApiId: !Ref SanitiSenseApi
             Path: /dashboard/recent
             Method: get
+        DashboardReports:       # NEW — individual ward report markers for map
+          Type: Api
+          Properties:
+            RestApiId: !Ref SanitiSenseApi
+            Path: /dashboard/reports
+            Method: get
       Policies:
         - DynamoDBCrudPolicy:
             TableName: SanitiSense
 
-# NOTE: DynamoDB table and S3 buckets were created manually:
-#   - DynamoDB: SanitiSense (PK/SK + GSI1)
-#   - S3: sanitisense-media-982253889131
-#   - S3: sanitisense-knowledge-982253889131
+# ── Outputs ────────────────────────────────────────────────────────────────
+# NOTE: DynamoDB table, S3 buckets were created manually. This SAM template
+# only manages Lambda functions + API Gateway.
+#
+#   DynamoDB table: SanitiSense (PK/SK + GSI1)
+#   S3 media bucket: sanitisense-media-982253889131 (CORS enabled)
+#   S3 knowledge bucket: sanitisense-knowledge-982253889131
 
-# ========== OUTPUTS ==========
 Outputs:
   ApiUrl:
-    Description: API Gateway endpoint URL
+    Description: "API Gateway base URL. Set as NEXT_PUBLIC_API_URL in frontend."
     Value: !Sub 'https://${SanitiSenseApi}.execute-api.${AWS::Region}.amazonaws.com/prod'
