@@ -1,0 +1,282 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: SanitiSense AI — Backend Infrastructure (SAM Template)
+
+# ============================================
+# HOW TO DEPLOY:
+#   sam build
+#   sam deploy --guided
+# ============================================
+
+Globals:
+  Function:
+    Timeout: 30
+    MemorySize: 256
+    Runtime: python3.12
+    Environment:
+      Variables:
+        TABLE_NAME: !Ref SanitiSenseTable
+        S3_BUCKET: !Ref MediaBucket
+        BEDROCK_MODEL_ID: anthropic.claude-3-sonnet-20240229-v1:0
+        KNOWLEDGE_BASE_ID: YOUR_KB_ID  # TODO: replace after creating KB
+
+Resources:
+
+  # ========== API GATEWAY ==========
+  SanitiSenseApi:
+    Type: AWS::Serverless::Api
+    Properties:
+      StageName: prod
+      Cors:
+        AllowMethods: "'GET,POST,PUT,OPTIONS'"
+        AllowHeaders: "'Content-Type,Authorization'"
+        AllowOrigin: "'*'"
+
+  # ========== LAMBDA FUNCTIONS ==========
+  ReportProcessorFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ../backend/lambdas/
+      Handler: report_processor.handler
+      Events:
+        PostReport:
+          Type: Api
+          Properties:
+            RestApiId: !Ref SanitiSenseApi
+            Path: /reports
+            Method: post
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref SanitiSenseTable
+        - S3CrudPolicy:
+            BucketName: !Ref MediaBucket
+
+  ImageAnalyzerFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ../backend/lambdas/
+      Handler: image_analyzer.handler
+      Timeout: 60
+      MemorySize: 512
+      Events:
+        AnalyzeImage:
+          Type: Api
+          Properties:
+            RestApiId: !Ref SanitiSenseApi
+            Path: /analyze
+            Method: post
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref SanitiSenseTable
+        - S3ReadPolicy:
+            BucketName: !Ref MediaBucket
+        - Statement:
+            - Effect: Allow
+              Action:
+                - bedrock:InvokeModel
+              Resource: '*'
+        - Statement:
+            - Effect: Allow
+              Action:
+                - rekognition:DetectLabels
+              Resource: '*'
+
+  TaskManagerFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ../backend/lambdas/
+      Handler: task_manager.handler
+      Events:
+        CreateTask:
+          Type: Api
+          Properties:
+            RestApiId: !Ref SanitiSenseApi
+            Path: /tasks
+            Method: post
+        GetTasks:
+          Type: Api
+          Properties:
+            RestApiId: !Ref SanitiSenseApi
+            Path: /tasks
+            Method: get
+        UpdateTask:
+          Type: Api
+          Properties:
+            RestApiId: !Ref SanitiSenseApi
+            Path: /tasks/{task_id}
+            Method: put
+        GetWorkerTasks:
+          Type: Api
+          Properties:
+            RestApiId: !Ref SanitiSenseApi
+            Path: /worker/{worker_id}/tasks
+            Method: get
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref SanitiSenseTable
+
+  ValidationFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ../backend/lambdas/
+      Handler: validation.handler
+      Timeout: 60
+      MemorySize: 512
+      Events:
+        Validate:
+          Type: Api
+          Properties:
+            RestApiId: !Ref SanitiSenseApi
+            Path: /validate
+            Method: post
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref SanitiSenseTable
+        - S3ReadPolicy:
+            BucketName: !Ref MediaBucket
+        - Statement:
+            - Effect: Allow
+              Action:
+                - bedrock:InvokeModel
+              Resource: '*'
+
+  EpidemicAdvisorFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ../backend/lambdas/
+      Handler: epidemic_advisor.handler
+      Timeout: 60
+      Events:
+        GetEpidemicRisk:
+          Type: Api
+          Properties:
+            RestApiId: !Ref SanitiSenseApi
+            Path: /epidemic
+            Method: get
+        GetCityOverview:
+          Type: Api
+          Properties:
+            RestApiId: !Ref SanitiSenseApi
+            Path: /epidemic/city-overview
+            Method: get
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref SanitiSenseTable
+        - Statement:
+            - Effect: Allow
+              Action:
+                - bedrock:InvokeModel
+                - bedrock:RetrieveAndGenerate
+                - bedrock:Retrieve
+              Resource: '*'
+
+  DashboardApiFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ../backend/lambdas/
+      Handler: dashboard_api.handler
+      Events:
+        FullDashboard:
+          Type: Api
+          Properties:
+            RestApiId: !Ref SanitiSenseApi
+            Path: /dashboard
+            Method: get
+        DashboardStats:
+          Type: Api
+          Properties:
+            RestApiId: !Ref SanitiSenseApi
+            Path: /dashboard/stats
+            Method: get
+        DashboardHeatmap:
+          Type: Api
+          Properties:
+            RestApiId: !Ref SanitiSenseApi
+            Path: /dashboard/heatmap
+            Method: get
+        DashboardTrends:
+          Type: Api
+          Properties:
+            RestApiId: !Ref SanitiSenseApi
+            Path: /dashboard/trends
+            Method: get
+        DashboardLeaderboard:
+          Type: Api
+          Properties:
+            RestApiId: !Ref SanitiSenseApi
+            Path: /dashboard/leaderboard
+            Method: get
+        DashboardRecent:
+          Type: Api
+          Properties:
+            RestApiId: !Ref SanitiSenseApi
+            Path: /dashboard/recent
+            Method: get
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref SanitiSenseTable
+
+  # ========== DYNAMODB ==========
+  SanitiSenseTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: SanitiSense
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: PK
+          AttributeType: S
+        - AttributeName: SK
+          AttributeType: S
+        - AttributeName: GSI1PK
+          AttributeType: S
+        - AttributeName: GSI1SK
+          AttributeType: S
+      KeySchema:
+        - AttributeName: PK
+          KeyType: HASH
+        - AttributeName: SK
+          KeyType: RANGE
+      GlobalSecondaryIndexes:
+        - IndexName: GSI1
+          KeySchema:
+            - AttributeName: GSI1PK
+              KeyType: HASH
+            - AttributeName: GSI1SK
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+
+  # ========== S3 BUCKETS ==========
+  MediaBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub 'sanitisense-media-${AWS::AccountId}'
+      CorsConfiguration:
+        CorsRules:
+          - AllowedHeaders: ['*']
+            AllowedMethods: [GET, PUT, POST]
+            AllowedOrigins: ['*']
+            MaxAge: 3600
+
+  KnowledgeBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub 'sanitisense-knowledge-${AWS::AccountId}'
+
+# ========== OUTPUTS ==========
+Outputs:
+  ApiUrl:
+    Description: API Gateway endpoint URL
+    Value: !Sub 'https://${SanitiSenseApi}.execute-api.${AWS::Region}.amazonaws.com/prod'
+  
+  TableName:
+    Description: DynamoDB table name
+    Value: !Ref SanitiSenseTable
+  
+  MediaBucketName:
+    Description: S3 Media bucket name
+    Value: !Ref MediaBucket
+  
+  KnowledgeBucketName:
+    Description: S3 Knowledge Base bucket name
+    Value: !Ref KnowledgeBucket
