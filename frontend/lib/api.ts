@@ -235,6 +235,33 @@ export const validateCompletion = (data: {
     body: JSON.stringify(data),
   });
 
+// Epidemic Advisory
+export interface EpidemicAdvisory {
+  ward_number: number;
+  risk_level: string;
+  advisory: string;
+  diseases_at_risk: string[];
+  recommended_actions: string[];
+  stats: Record<string, unknown>;
+  data_source: string;
+  generated_at: string;
+}
+
+export interface CityOverview {
+  city: string;
+  overall_risk: string;
+  high_risk_wards: { ward_number: number; name: string; risk_level: string; open_reports: number }[];
+  total_open_reports: number;
+  advisory_summary: string;
+  generated_at: string;
+}
+
+export const fetchEpidemicAdvisory = (ward: number) =>
+  apiFetch<EpidemicAdvisory>(`/epidemic?ward=${ward}`);
+
+export const fetchCityOverview = () =>
+  apiFetch<CityOverview>('/epidemic/city-overview');
+
 // S3 Upload helper — generates a presigned-style path
 export function getS3UploadKey(filename: string): string {
   const now = new Date();

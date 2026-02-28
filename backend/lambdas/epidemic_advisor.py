@@ -180,38 +180,113 @@ Return ONLY valid JSON (no extra text):
 
 
 def _query_direct(stats: dict) -> dict:
-    """Call Bedrock directly (no RAG) and parse structured JSON response."""
-    bedrock = _get_bedrock()
-    prompt = DIRECT_PROMPT_TEMPLATE.format(**stats)
-
-    request_body = {
-        'anthropic_version': 'bedrock-2023-05-31',
-        'max_tokens': 1024,
-        'messages': [{'role': 'user', 'content': prompt}],
-    }
-    response = bedrock.invoke_model(
-        modelId=BEDROCK_MODEL_ID,
-        contentType='application/json',
-        body=json.dumps(request_body),
-    )
-    result = json.loads(response['body'].read())
-    raw_text = result['content'][0]['text']
-
-    # Parse JSON from the response text
+    """Call Bedrock directly (no RAG) and parse structured JSON response.
+    Falls back to smart heuristic-based advisory if Bedrock is unavailable."""
     try:
-        parsed = json.loads(raw_text)
-    except json.JSONDecodeError:
-        # Claude sometimes wraps JSON in markdown — strip it
-        match = re.search(r'\{.*\}', raw_text, re.DOTALL)
-        parsed = json.loads(match.group()) if match else {}
+        bedrock = _get_bedrock()
+        prompt = DIRECT_PROMPT_TEMPLATE.format(**stats)
+
+        request_body = {
+            'anthropic_version': 'bedrock-2023-05-31',
+            'max_tokens': 1024,
+            'messages': [{'role': 'user', 'content': prompt}],
+        }
+        response = bedrock.invoke_model(
+            modelId=BEDROCK_MODEL_ID,
+            contentType='application/json',
+            body=json.dumps(request_body),
+        )
+        result = json.loads(response['body'].read())
+        raw_text = result['content'][0]['text']
+
+        # Parse JSON from the response text
+        try:
+            parsed = json.loads(raw_text)
+        except json.JSONDecodeError:
+            # Claude sometimes wraps JSON in markdown — strip it
+            match = re.search(r'\{.*\}', raw_text, re.DOTALL)
+            parsed = json.loads(match.group()) if match else {}
+
+        return {
+            'text': parsed.get('advisory', raw_text),
+            'risk_level': parsed.get('risk_level', 'medium'),
+            'diseases_at_risk': parsed.get('diseases_at_risk', []),
+            'recommended_actions': parsed.get('recommended_actions', []),
+            'citations': [],
+            'source': 'bedrock_direct',
+        }
+
+    except Exception as e:
+        print(f"[FALLBACK] Bedrock epidemic advisor unavailable: {e}")
+        return _smart_mock_advisory(stats)
+
+
+def _smart_mock_advisory(stats: dict) -> dict:
+    """
+    Smart heuristic-based epidemic advisory when Bedrock is unavailable.
+    Uses real DynamoDB ward stats to generate realistic advisories.
+    """
+    avg_sev = stats.get('avg_severity', 0)
+    stagnant = stats.get('stagnant_water_count', 0)
+    open_reports = stats.get('open_reports', 0)
+    season = stats.get('season', 'winter')
+    top_cats = stats.get('top_categories', '')
+
+    # Determine risk level from data
+    if avg_sev >= 8 or stagnant >= 4:
+        risk_level = 'critical'
+    elif avg_sev >= 6 or stagnant >= 2:
+        risk_level = 'high'
+    elif avg_sev >= 4:
+        risk_level = 'medium'
+    else:
+        risk_level = 'low'
+
+    # Season-aware disease mapping
+    diseases = []
+    if stagnant > 0 or 'stagnant_water' in top_cats:
+        diseases.extend(['Dengue', 'Malaria'])
+        if season == 'monsoon':
+            diseases.append('Chikungunya')
+    if 'blocked_sewer' in top_cats or 'overflowing_drain' in top_cats:
+        diseases.extend(['Cholera', 'Typhoid', 'Leptospirosis'])
+    if 'garbage_pile' in top_cats:
+        diseases.append('Diarrheal diseases')
+    if 'medical_waste' in top_cats:
+        diseases.append('Hepatitis B')
+    if not diseases:
+        diseases = ['Gastroenteritis', 'Skin infections']
+    # Deduplicate
+    diseases = list(dict.fromkeys(diseases))
+
+    # Generate contextual actions
+    actions = []
+    if stagnant > 0:
+        actions.append(f'Deploy anti-larval fogging in {stagnant} stagnant water locations immediately')
+    if avg_sev >= 7:
+        actions.append('Dispatch emergency cleanup crews within 24 hours to high-severity zones')
+    if 'blocked_sewer' in top_cats:
+        actions.append('Schedule sewer line jetting and desilting operations this week')
+    if open_reports > 3:
+        actions.append(f'Allocate additional workers — {open_reports} open reports need attention')
+    actions.append('Issue public health advisory through ward office and local community channels')
+    actions.append('Setup temporary health camp for screening in affected areas')
+
+    advisory = (
+        f"Ward {stats['ward_number']} shows {risk_level} epidemic risk based on "
+        f"{open_reports} open sanitation reports with average severity {avg_sev}/10. "
+        f"Key concerns: {top_cats}. "
+        f"During {season} season, these conditions elevate risk for "
+        f"{', '.join(diseases[:3])}. Immediate intervention recommended."
+    )
 
     return {
-        'text': parsed.get('advisory', raw_text),
-        'risk_level': parsed.get('risk_level', 'medium'),
-        'diseases_at_risk': parsed.get('diseases_at_risk', []),
-        'recommended_actions': parsed.get('recommended_actions', []),
+        'text': advisory,
+        'risk_level': risk_level,
+        'diseases_at_risk': diseases[:5],
+        'recommended_actions': actions[:5],
         'citations': [],
-        'source': 'bedrock_direct',
+        'source': 'heuristic_fallback',
     }
 
 

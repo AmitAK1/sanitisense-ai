@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
+import dynamic from 'next/dynamic';
 import {
   ClipboardList,
   CheckCircle,
@@ -14,15 +15,22 @@ import {
   User,
   MapPin,
   Filter,
+  Image as ImageIcon,
+  ShieldCheck,
+  Navigation,
 } from 'lucide-react';
 import {
   fetchTasks,
   updateTask,
+  uploadImageToS3,
+  validateCompletion,
   CATEGORY_LABELS,
   PRIORITY_COLORS,
   STATUS_COLORS,
   type Task,
 } from '@/lib/api';
+
+const WorkerTaskMap = dynamic(() => import('@/app/components/WorkerTaskMap'), { ssr: false });
 
 function getWorkerId(): string {
   if (typeof window !== 'undefined') {
@@ -39,8 +47,13 @@ export default function WorkerDashboard() {
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [updating, setUpdating] = useState(false);
   const [afterPhoto, setAfterPhoto] = useState<string>('');
+  const [afterPhotoFile, setAfterPhotoFile] = useState<File | null>(null);
   const [workerNotes, setWorkerNotes] = useState('');
+  const [validationResult, setValidationResult] = useState<Record<string, unknown> | null>(null);
+  const [showMap, setShowMap] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+
+  const S3_BASE = 'https://sanitisense-media-982253889131.s3.us-east-1.amazonaws.com';
 
   // Load tasks
   useEffect(() => {
@@ -60,14 +73,42 @@ export default function WorkerDashboard() {
     }
   };
 
-  // Update task status
+  // Update task status — with S3 upload + validation for completion
   const handleStatusUpdate = async (taskId: string, newStatus: string) => {
     setUpdating(true);
+    setValidationResult(null);
     try {
-      await updateTask(taskId, { status: newStatus, notes: workerNotes });
+      if (newStatus === 'completed' && afterPhotoFile && selectedTask?.image_key) {
+        // Step 1: Upload after-photo to S3
+        const afterKey = await uploadImageToS3(afterPhotoFile, 'worker');
+
+        // Step 2: Update task with after_image_key
+        await updateTask(taskId, { status: 'completed', notes: workerNotes });
+
+        // Step 3: Call validation endpoint (before/after AI comparison)
+        try {
+          const validation = await validateCompletion({
+            task_id: taskId,
+            before_image_key: selectedTask.image_key,
+            after_image_key: afterKey,
+          });
+          setValidationResult(validation as unknown as Record<string, unknown>);
+          // Don't close modal — show validation result
+          loadTasks();
+          return;
+        } catch {
+          // Validation call failed but task is still marked complete
+          console.warn('Validation API call failed, task still marked complete');
+        }
+      } else {
+        // Simple status update (start task, etc.)
+        await updateTask(taskId, { status: newStatus, notes: workerNotes });
+      }
       setSelectedTask(null);
       setWorkerNotes('');
       setAfterPhoto('');
+      setAfterPhotoFile(null);
+      setValidationResult(null);
       loadTasks();
     } catch {
       // Optimistic update for demo
@@ -80,10 +121,11 @@ export default function WorkerDashboard() {
     }
   };
 
-  // Handle after photo
+  // Handle after photo — keep both File (for S3 upload) and base64 (for preview)
   const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
+      setAfterPhotoFile(file);
       const reader = new FileReader();
       reader.onload = (ev) => setAfterPhoto(ev.target?.result as string);
       reader.readAsDataURL(file);
@@ -125,9 +167,10 @@ export default function WorkerDashboard() {
       </div>
 
       <div className="max-w-4xl mx-auto px-4 py-6">
-        {/* Filter tabs */}
-        <div className="flex gap-2 mb-6 overflow-x-auto pb-2">
-          {['pending', 'assigned', 'in_progress', 'completed'].map((status) => (
+        {/* View toggle: List | Map */}
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex gap-2 overflow-x-auto pb-2 flex-1">
+            {['pending', 'assigned', 'in_progress', 'completed'].map((status) => (
             <button
               key={status}
               onClick={() => setFilterStatus(status)}
@@ -140,7 +183,29 @@ export default function WorkerDashboard() {
               {status.replace('_', ' ').replace(/\b\w/g, (c) => c.toUpperCase())}
             </button>
           ))}
+          </div>
+          <button
+            onClick={() => setShowMap(!showMap)}
+            className={`ml-2 px-3 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-colors flex items-center gap-1.5 ${
+              showMap
+                ? 'bg-emerald-600 text-white'
+                : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'
+            }`}
+          >
+            {showMap ? <ClipboardList className="h-4 w-4" /> : <Navigation className="h-4 w-4" />}
+            {showMap ? 'List' : 'Map'}
+          </button>
         </div>
+
+        {/* Map view */}
+        {showMap && tasks.length > 0 && (
+          <div className="mb-6 bg-white rounded-xl border border-gray-200 overflow-hidden">
+            <WorkerTaskMap
+              tasks={tasks}
+              onTaskClick={(task) => setSelectedTask(task)}
+            />
+          </div>
+        )}
 
         {/* Loading */}
         {loading && (
@@ -224,7 +289,9 @@ export default function WorkerDashboard() {
                 onClick={() => {
                   setSelectedTask(null);
                   setAfterPhoto('');
+                  setAfterPhotoFile(null);
                   setWorkerNotes('');
+                  setValidationResult(null);
                 }}
               >
                 <X className="h-5 w-5 text-gray-500" />
@@ -232,6 +299,22 @@ export default function WorkerDashboard() {
             </div>
 
             <div className="p-4 space-y-4">
+              {/* Citizen's before-photo */}
+              {selectedTask.image_key && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-1.5">
+                    <ImageIcon className="h-4 w-4 text-red-500" />
+                    Reported Issue (Before)
+                  </label>
+                  <img
+                    src={`${S3_BASE}/${selectedTask.image_key}`}
+                    alt="Reported issue"
+                    className="w-full h-44 object-cover rounded-lg border border-gray-200"
+                    onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                  />
+                </div>
+              )}
+
               {/* Task info */}
               <div className="space-y-2">
                 <div className="flex justify-between text-sm">
@@ -372,6 +455,47 @@ export default function WorkerDashboard() {
                   </div>
                 )}
               </div>
+
+              {/* AI Validation Result */}
+              {validationResult && (
+                <div className="border border-purple-200 bg-purple-50 rounded-xl p-4 space-y-2">
+                  <h4 className="font-semibold text-purple-800 flex items-center gap-2">
+                    <ShieldCheck className="h-5 w-5" />
+                    AI Verification Result
+                  </h4>
+                  <div className="grid grid-cols-2 gap-2 text-sm">
+                    <div>
+                      <span className="text-gray-500">Status:</span>{' '}
+                      <span className="font-semibold capitalize">
+                        {String((validationResult as Record<string, unknown>).new_status || 'pending')}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-gray-500">Score:</span>{' '}
+                      <span className="font-semibold">
+                        {String(((validationResult as Record<string, Record<string, unknown>>).validation || {}).resolution_score || '-')}/10
+                      </span>
+                    </div>
+                  </div>
+                  {((validationResult as Record<string, Record<string, unknown>>).validation || {}).observations ? (
+                    <p className="text-sm text-purple-700 mt-1">
+                      {String(((validationResult as Record<string, Record<string, unknown>>).validation || {}).observations)}
+                    </p>
+                  ) : null}
+                  <button
+                    onClick={() => {
+                      setSelectedTask(null);
+                      setAfterPhoto('');
+                      setAfterPhotoFile(null);
+                      setWorkerNotes('');
+                      setValidationResult(null);
+                    }}
+                    className="w-full mt-2 py-2 bg-purple-600 text-white rounded-lg text-sm font-medium hover:bg-purple-700"
+                  >
+                    Close
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         </div>

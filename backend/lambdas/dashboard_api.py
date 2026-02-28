@@ -288,11 +288,14 @@ def get_worker_leaderboard(reports, limit=10):
     worker_stats = defaultdict(lambda: {'completed': 0, 'total_hours': 0, 'count': 0})
 
     for r in reports:
-        worker = r.get('assigned_worker_id')
+        worker = r.get('assigned_worker_id') or r.get('worker_name', '')
         if not worker:
             continue
         if r.get('status') in ('completed', 'verified'):
             worker_stats[worker]['completed'] += 1
+            # Also store worker name if available
+            if r.get('worker_name'):
+                worker_stats[worker]['name'] = r['worker_name']
             try:
                 created = datetime.fromisoformat(r['created_at'].replace('Z', ''))
                 updated = datetime.fromisoformat(r['updated_at'].replace('Z', ''))
@@ -303,12 +306,26 @@ def get_worker_leaderboard(reports, limit=10):
             except (KeyError, ValueError):
                 pass
 
+    # Look up worker names from WORKER# profiles
+    worker_names = {}
+    try:
+        profile_resp = table.scan(
+            FilterExpression=Attr('PK').begins_with('WORKER#') & Attr('SK').eq('PROFILE')
+        )
+        for p in profile_resp.get('Items', []):
+            wid = p.get('worker_id', '')
+            if wid:
+                worker_names[wid] = p.get('name', f'Worker {wid}')
+    except Exception:
+        pass
+
     workers = []
     for wid, stats in worker_stats.items():
         avg_hours = round(stats['total_hours'] / stats['count'], 1) if stats['count'] else 0
+        name = stats.get('name') or worker_names.get(wid, f'Worker {wid[-4:]}')
         workers.append({
             'worker_id': wid,
-            'name': f'Worker {wid[-4:]}',
+            'name': name,
             'completed_this_week': stats['completed'],
             'avg_rating': round(3.5 + min(stats['completed'], 5) * 0.3, 1),
             'avg_resolution_hours': avg_hours

@@ -37,6 +37,8 @@ import {
 } from 'recharts';
 import {
   fetchDashboard,
+  fetchCityOverview,
+  fetchEpidemicAdvisory,
   CATEGORY_LABELS,
   CATEGORY_COLORS,
   STATUS_COLORS,
@@ -47,12 +49,17 @@ import {
   type TrendData,
   type WorkerLeaderboard,
   type RecentReport,
+  type CityOverview,
+  type EpidemicAdvisory,
 } from '@/lib/api';
 
 export default function AdminDashboard() {
   const [dashboard, setDashboard] = useState<FullDashboard | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [cityOverview, setCityOverview] = useState<CityOverview | null>(null);
+  const [selectedWardAdvisory, setSelectedWardAdvisory] = useState<EpidemicAdvisory | null>(null);
+  const [loadingAdvisory, setLoadingAdvisory] = useState(false);
 
   useEffect(() => {
     loadDashboard();
@@ -64,11 +71,26 @@ export default function AdminDashboard() {
     try {
       const data = await fetchDashboard();
       setDashboard(data);
+      // Also fetch city epidemic overview (non-blocking)
+      fetchCityOverview().then(setCityOverview).catch(() => {});
     } catch {
       // Use fallback data
       setDashboard(getFallbackDashboard());
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadWardAdvisory = async (wardNumber: number) => {
+    setLoadingAdvisory(true);
+    setSelectedWardAdvisory(null);
+    try {
+      const data = await fetchEpidemicAdvisory(wardNumber);
+      setSelectedWardAdvisory(data);
+    } catch {
+      setSelectedWardAdvisory(null);
+    } finally {
+      setLoadingAdvisory(false);
     }
   };
 
@@ -296,6 +318,106 @@ export default function AdminDashboard() {
         </div>
 
         {/* ==================== LEADERBOARD & TABLE ==================== */}
+        {/* ==================== EPIDEMIC ADVISORY ==================== */}
+        <div className="bg-white rounded-xl border border-gray-200 p-6">
+          <h3 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
+            <AlertTriangle className="h-5 w-5 text-red-500" />
+            Epidemic Risk Advisory
+            {cityOverview && (
+              <span className={`ml-2 text-xs font-bold px-2 py-0.5 rounded-full ${
+                cityOverview.overall_risk === 'high' ? 'bg-red-100 text-red-700'
+                : cityOverview.overall_risk === 'medium' ? 'bg-amber-100 text-amber-700'
+                : 'bg-green-100 text-green-700'
+              }`}>
+                {cityOverview.overall_risk.toUpperCase()} RISK
+              </span>
+            )}
+          </h3>
+
+          {/* City overview summary */}
+          {cityOverview && (
+            <div className="mb-4 p-3 bg-gray-50 rounded-lg text-sm text-gray-700">
+              <p>{cityOverview.advisory_summary}</p>
+              <p className="text-xs text-gray-400 mt-1">
+                {cityOverview.total_open_reports} total open reports across {cityOverview.city}
+              </p>
+            </div>
+          )}
+
+          {/* High risk wards */}
+          {cityOverview && cityOverview.high_risk_wards.length > 0 && (
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 mb-4">
+              {cityOverview.high_risk_wards.map((w) => (
+                <button
+                  key={w.ward_number}
+                  onClick={() => loadWardAdvisory(w.ward_number)}
+                  className="text-left border border-red-200 bg-red-50 rounded-lg p-2.5 text-xs hover:bg-red-100 transition"
+                >
+                  <div className="font-semibold text-red-800">{w.name}</div>
+                  <div className="text-red-600">{w.open_reports} open reports</div>
+                  <span className="text-[10px] font-bold text-red-700">Click for advisory →</span>
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* Ward-specific advisory */}
+          {loadingAdvisory && (
+            <div className="flex items-center justify-center py-6">
+              <Loader2 className="h-6 w-6 animate-spin text-emerald-600" />
+              <span className="ml-2 text-sm text-gray-500">Generating AI advisory...</span>
+            </div>
+          )}
+
+          {selectedWardAdvisory && !loadingAdvisory && (
+            <div className="border border-amber-200 bg-amber-50 rounded-lg p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <h4 className="font-semibold text-amber-800">
+                  Ward {selectedWardAdvisory.ward_number} — {selectedWardAdvisory.risk_level.toUpperCase()} Risk
+                </h4>
+                <span className="text-[10px] text-gray-400">
+                  Source: {selectedWardAdvisory.data_source}
+                </span>
+              </div>
+              <p className="text-sm text-gray-700">{selectedWardAdvisory.advisory}</p>
+
+              {selectedWardAdvisory.diseases_at_risk.length > 0 && (
+                <div>
+                  <span className="text-xs font-semibold text-gray-600">Diseases at Risk:</span>
+                  <div className="flex flex-wrap gap-1.5 mt-1">
+                    {selectedWardAdvisory.diseases_at_risk.map((d) => (
+                      <span key={d} className="text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded-full font-medium">
+                        {d}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {selectedWardAdvisory.recommended_actions.length > 0 && (
+                <div>
+                  <span className="text-xs font-semibold text-gray-600">Recommended Actions:</span>
+                  <ul className="mt-1 space-y-1">
+                    {selectedWardAdvisory.recommended_actions.map((a, i) => (
+                      <li key={i} className="text-xs text-gray-700 flex items-start gap-1.5">
+                        <CheckCircle className="h-3.5 w-3.5 text-emerald-500 flex-shrink-0 mt-0.5" />
+                        {a}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Quick ward selector for non-high-risk wards */}
+          {!cityOverview && (
+            <div className="text-sm text-gray-400 text-center py-4">
+              Loading epidemic data...
+            </div>
+          )}
+        </div>
+
         <div className="grid lg:grid-cols-3 gap-6">
           {/* Ward table (compact) */}
           <div className="lg:col-span-2 bg-white rounded-xl border border-gray-200 p-6">

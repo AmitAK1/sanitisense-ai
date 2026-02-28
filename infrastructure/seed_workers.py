@@ -16,6 +16,7 @@ These match the hardcoded workers referenced in the demo.
 
 import boto3
 from datetime import datetime
+from decimal import Decimal
 
 dynamodb = boto3.resource('dynamodb', region_name='us-east-1')
 table = dynamodb.Table('SanitiSense')
@@ -30,7 +31,7 @@ WORKERS = [
         'status': 'active',
         'phone': '9876543210',
         'total_completed': 45,
-        'avg_rating': 4.3,
+        'avg_rating': Decimal('4.3'),
         'created_at': '2026-01-01T00:00:00Z',
     },
     {
@@ -42,7 +43,7 @@ WORKERS = [
         'status': 'active',
         'phone': '9123456780',
         'total_completed': 38,
-        'avg_rating': 4.6,
+        'avg_rating': Decimal('4.6'),
         'created_at': '2026-01-01T00:00:00Z',
     },
     {
@@ -54,7 +55,7 @@ WORKERS = [
         'status': 'active',
         'phone': '9988776655',
         'total_completed': 62,
-        'avg_rating': 4.1,
+        'avg_rating': Decimal('4.1'),
         'created_at': '2026-01-01T00:00:00Z',
     },
     {
@@ -66,7 +67,7 @@ WORKERS = [
         'status': 'active',
         'phone': '8877665544',
         'total_completed': 29,
-        'avg_rating': 4.5,
+        'avg_rating': Decimal('4.5'),
         'created_at': '2026-01-01T00:00:00Z',
     },
     {
@@ -78,7 +79,7 @@ WORKERS = [
         'status': 'active',
         'phone': '7766554433',
         'total_completed': 51,
-        'avg_rating': 4.2,
+        'avg_rating': Decimal('4.2'),
         'created_at': '2026-01-01T00:00:00Z',
     },
 ]
