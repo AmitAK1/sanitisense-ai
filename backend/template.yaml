@@ -1,0 +1,322 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  SanitiSense AI — Serverless Backend
+  Updates Lambda functions and API Gateway only.
+  DynamoDB table, S3 bucket were created manually and are NOT managed here.
+
+  Deploy with:
+    sam build
+    sam deploy --no-confirm-changeset
+
+# ─── Global defaults ───────────────────────────────────────────────────────────
+Globals:
+  Function:
+    Runtime: python3.12
+    Timeout: 30
+    MemorySize: 512
+    Environment:
+      Variables:
+        # These match the ACTUAL deployed resource names
+        TABLE_NAME: SanitiSense                              # real DynamoDB table
+        S3_BUCKET: sanitisense-media-982253889131            # real S3 bucket
+        BEDROCK_MODEL_ID: us.anthropic.claude-sonnet-4-20250514-v1:0
+        KNOWLEDGE_BASE_ID: ''    # fill in after creating Bedrock KB
+
+# ─── Parameters ────────────────────────────────────────────────────────────────
+Parameters:
+  KnowledgeBaseId:
+    Type: String
+    Default: ''
+    Description: "Bedrock Knowledge Base ID for the epidemic advisor. Leave blank if not yet created."
+
+# NOTE: DynamoDB table and S3 buckets already created manually:
+#   DynamoDB: SanitiSense  (PK/SK uppercase, GSI1)
+#   S3:       sanitisense-media-982253889131  (CORS enabled)
+#   S3:       sanitisense-knowledge-982253889131
+
+# ─── Resources ────────────────────────────────────────────────────────────────
+Resources:
+
+  # ── API Gateway ──────────────────────────────────────────────────────────────
+  SanitiSenseApi:
+    Type: AWS::Serverless::Api
+    Properties:
+      StageName: prod
+      Cors:
+        AllowMethods: "'GET,POST,PUT,OPTIONS'"
+        AllowHeaders: "'Content-Type,Authorization'"
+        AllowOrigin: "'*'"
+
+  # ── Lambda: get_upload_url ────────────────────────────────────────────────────
+  GetUploadUrlFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: sanitisense-get-upload-url
+      CodeUri: lambdas/
+      Handler: get_upload_url.handler
+      Timeout: 5
+      Policies:
+        - S3CrudPolicy:
+            BucketName: sanitisense-media-982253889131
+      Events:
+        GetUploadUrl:
+          Type: Api
+          Properties:
+            RestApiId: !Ref SanitiSenseApi
+            Path: /upload-url
+            Method: get
+
+  # ── Lambda: report_processor ──────────────────────────────────────────────────
+  # Synchronous: calls Bedrock directly, returns ai_analysis to frontend
+  ReportProcessorFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: sanitisense-report-processor
+      CodeUri: lambdas/
+      Handler: report_processor.handler
+      Timeout: 60      # Bedrock can take up to 30s
+      MemorySize: 512
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: SanitiSense
+        - S3ReadPolicy:
+            BucketName: sanitisense-media-982253889131
+        - Statement:
+            - Effect: Allow
+              Action:
+                - bedrock:InvokeModel
+                - rekognition:DetectLabels
+              Resource: '*'
+      Events:
+        PostReport:
+          Type: Api
+          Properties:
+            RestApiId: !Ref SanitiSenseApi
+            Path: /reports
+            Method: post
+        GetReports:
+          Type: Api
+          Properties:
+            RestApiId: !Ref SanitiSenseApi
+            Path: /reports
+            Method: get
+        GetReport:
+          Type: Api
+          Properties:
+            RestApiId: !Ref SanitiSenseApi
+            Path: /reports/{ticket_id}
+            Method: get
+
+  # ── Lambda: task_manager ──────────────────────────────────────────────────────
+  TaskManagerFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: sanitisense-task-manager
+      CodeUri: lambdas/
+      Handler: task_manager.handler
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: SanitiSense
+      Events:
+        GetTasks:
+          Type: Api
+          Properties:
+            RestApiId: !Ref SanitiSenseApi
+            Path: /tasks
+            Method: get
+        CreateTask:
+          Type: Api
+          Properties:
+            RestApiId: !Ref SanitiSenseApi
+            Path: /tasks
+            Method: post
+        StartTask:
+          Type: Api
+          Properties:
+            RestApiId: !Ref SanitiSenseApi
+            Path: /tasks/{task_id}/start
+            Method: post
+        CompleteTask:
+          Type: Api
+          Properties:
+            RestApiId: !Ref SanitiSenseApi
+            Path: /tasks/{task_id}/complete
+            Method: post
+        UpdateTask:
+          Type: Api
+          Properties:
+            RestApiId: !Ref SanitiSenseApi
+            Path: /tasks/{task_id}
+            Method: put
+        GetWorkerTasks:
+          Type: Api
+          Properties:
+            RestApiId: !Ref SanitiSenseApi
+            Path: /worker/{worker_id}/tasks
+            Method: get
+        GetWorkerProfile:
+          Type: Api
+          Properties:
+            RestApiId: !Ref SanitiSenseApi
+            Path: /worker/{worker_id}/profile
+            Method: get
+
+  # ── Lambda: validation ────────────────────────────────────────────────────────
+  ValidationFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: sanitisense-validation
+      CodeUri: lambdas/
+      Handler: validation.handler
+      Timeout: 60
+      Policies:
+        - S3ReadPolicy:
+            BucketName: sanitisense-media-982253889131
+        - DynamoDBCrudPolicy:
+            TableName: SanitiSense
+        - Statement:
+            - Effect: Allow
+              Action:
+                - bedrock:InvokeModel
+              Resource: '*'
+      Events:
+        ValidateTask:
+          Type: Api
+          Properties:
+            RestApiId: !Ref SanitiSenseApi
+            Path: /validate
+            Method: post
+
+  # ── Lambda: dashboard_api ─────────────────────────────────────────────────────
+  DashboardApiFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: sanitisense-dashboard
+      CodeUri: lambdas/
+      Handler: dashboard_api.handler
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: SanitiSense
+      Events:
+        FullDashboard:
+          Type: Api
+          Properties:
+            RestApiId: !Ref SanitiSenseApi
+            Path: /dashboard
+            Method: get
+        DashboardStats:
+          Type: Api
+          Properties:
+            RestApiId: !Ref SanitiSenseApi
+            Path: /dashboard/stats
+            Method: get
+        DashboardHeatmap:
+          Type: Api
+          Properties:
+            RestApiId: !Ref SanitiSenseApi
+            Path: /dashboard/heatmap
+            Method: get
+        DashboardTrends:
+          Type: Api
+          Properties:
+            RestApiId: !Ref SanitiSenseApi
+            Path: /dashboard/trends
+            Method: get
+        DashboardLeaderboard:
+          Type: Api
+          Properties:
+            RestApiId: !Ref SanitiSenseApi
+            Path: /dashboard/leaderboard
+            Method: get
+        DashboardRecent:
+          Type: Api
+          Properties:
+            RestApiId: !Ref SanitiSenseApi
+            Path: /dashboard/recent
+            Method: get
+        DashboardReports:
+          Type: Api
+          Properties:
+            RestApiId: !Ref SanitiSenseApi
+            Path: /dashboard/reports
+            Method: get
+
+  # ── Lambda: epidemic_advisor ──────────────────────────────────────────────────
+  EpidemicAdvisorFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: sanitisense-epidemic-advisor
+      CodeUri: lambdas/
+      Handler: epidemic_advisor.handler
+      Timeout: 60
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: SanitiSense
+        - Statement:
+            - Effect: Allow
+              Action:
+                - bedrock:InvokeModel
+                - bedrock:RetrieveAndGenerate
+                - bedrock:Retrieve
+              Resource: '*'
+      Events:
+        WardAdvisory:
+          Type: Api
+          Properties:
+            RestApiId: !Ref SanitiSenseApi
+            Path: /epidemic
+            Method: get
+        CityOverview:
+          Type: Api
+          Properties:
+            RestApiId: !Ref SanitiSenseApi
+            Path: /epidemic/city-overview
+            Method: get
+
+  # ── Lambda: image_analyzer ────────────────────────────────────────────────────
+  ImageAnalyzerFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: sanitisense-image-analyzer
+      CodeUri: lambdas/
+      Handler: image_analyzer.handler
+      Timeout: 60
+      Policies:
+        - S3ReadPolicy:
+            BucketName: sanitisense-media-982253889131
+        - DynamoDBCrudPolicy:
+            TableName: SanitiSense
+        - Statement:
+            - Effect: Allow
+              Action:
+                - bedrock:InvokeModel
+                - rekognition:DetectLabels
+              Resource: '*'
+      Events:
+        AnalyzeImage:
+          Type: Api
+          Properties:
+            RestApiId: !Ref SanitiSenseApi
+            Path: /analyze
+            Method: post
+
+  # ── Lambda: stats_aggregator ──────────────────────────────────────────────────
+  # NOTE: Requires DynamoDB Streams to be enabled on the SanitiSense table.
+  # Check AWS Console → DynamoDB → SanitiSense → Exports and streams → Stream enabled.
+  StatsAggregatorFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: sanitisense-stats-aggregator
+      CodeUri: lambdas/
+      Handler: stats_aggregator.handler
+      Timeout: 15
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: SanitiSense
+
+# ─── Outputs ────────────────────────────────────────────────────────────────────
+Outputs:
+  ApiUrl:
+    Description: "API Gateway base URL. Set as NEXT_PUBLIC_API_URL in frontend."
+    Value: !Sub 'https://${SanitiSenseApi}.execute-api.${AWS::Region}.amazonaws.com/prod'
