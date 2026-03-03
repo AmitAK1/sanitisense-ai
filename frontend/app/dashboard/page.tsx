@@ -151,8 +151,8 @@ export default function AdminDashboard() {
           />
           <StatCard
             icon={CheckCircle}
-            label="Completed Today"
-            value={stats.completed_today.toString()}
+            label="Tasks Completed"
+            value={(stats.completed_today || stats.completed_count || 0).toString()}
             sub={`Avg ${stats.avg_resolution_hours}h`}
             color="emerald"
           />

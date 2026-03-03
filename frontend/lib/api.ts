@@ -15,6 +15,7 @@ export interface DashboardStats {
   pending_tasks: number;
   in_progress_tasks: number;
   completed_today: number;
+  completed_count?: number;
   avg_resolution_hours: number;
   citizen_satisfaction: number;
   ai_accuracy: number;
@@ -156,7 +157,9 @@ export const submitReport = (data: ReportSubmission) =>
 // Tasks — backend wraps response in {tasks: [...], count: N}
 export const fetchTasks = async (status = 'pending'): Promise<Task[]> => {
   const res = await apiFetch<{ tasks: Record<string, unknown>[]; count: number }>(`/tasks?status=${status}`);
-  return (res.tasks || []).map(normalizeTask);
+  return (res.tasks || [])
+    .filter((t) => t.task_id || t.report_id)   // skip phantom records with no IDs
+    .map(normalizeTask);
 };
 export const updateTask = (taskId: string, data: { status: string; notes?: string }) =>
   apiFetch<{ task_id: string; status: string }>(`/tasks/${taskId}`, {
@@ -223,9 +226,10 @@ function normalizeTask(raw: Record<string, unknown>): Task {
     else if (severity >= 4) { priority = 'medium'; sla_hours = 24; }
     else { priority = 'low'; sla_hours = 48; }
   }
+  const reportId = (raw.report_id || raw.report_ticket || '') as string;
   return {
-    task_id: (raw.task_id || '') as string,
-    report_id: (raw.report_id || raw.report_ticket || '') as string,
+    task_id: (raw.task_id || reportId || `auto-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`) as string,
+    report_id: reportId,
     status: (raw.status || 'pending') as string,
     priority,
     sla_hours,
@@ -239,6 +243,9 @@ function normalizeTask(raw: Record<string, unknown>): Task {
     image_key: (raw.image_key || '') as string,
     health_risk: (raw.health_risk || '') as string,
     ward_name: (raw.ward_name || '') as string,
+    location: raw.location
+      ? { lat: String((raw.location as Record<string, unknown>).lat || '0'), lng: String((raw.location as Record<string, unknown>).lng || '0') }
+      : undefined,
   };
 }
 

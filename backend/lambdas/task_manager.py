@@ -46,6 +46,25 @@ def _now() -> str:
     return datetime.utcnow().isoformat() + 'Z'
 
 
+def _find_task_key(task_id: str) -> dict:
+    """Find the DynamoDB key for a task, regardless of PK format.
+    Seed data uses PK=REPORT#, create_task() uses PK=TASK#."""
+    # Try TASK# first (new records)
+    resp = table.get_item(Key={'PK': f'TASK#{task_id}', 'SK': 'META'})
+    if 'Item' in resp:
+        return {'PK': f'TASK#{task_id}', 'SK': 'META'}
+    # Fallback: scan for task_id field (seed data uses REPORT# prefix)
+    # NOTE: Do NOT use Limit here — DynamoDB Limit caps items *evaluated*,
+    # not items *matched*, so Limit=1 almost never finds the right record.
+    resp = table.scan(
+        FilterExpression=Attr('task_id').eq(task_id) & Attr('SK').eq('META'),
+    )
+    items = resp.get('Items', [])
+    if items:
+        return {'PK': items[0]['PK'], 'SK': 'META'}
+    raise ValueError(f'Task {task_id} not found')
+
+
 def _priority_from_severity(severity: int) -> tuple:
     """Returns (priority_label, sla_hours)."""
     if severity >= 8:
@@ -150,8 +169,9 @@ def get_worker_tasks(worker_id: str) -> list:
 def start_task(task_id: str, worker_id: str) -> dict:
     """Assign task to worker and set status to in_progress."""
     now = _now()
+    key = _find_task_key(task_id)
     table.update_item(
-        Key={'PK': f'TASK#{task_id}', 'SK': 'META'},
+        Key=key,
         UpdateExpression=(
             'SET #st = :s, assigned_worker_id = :w, '
             'updated_at = :t, started_at = :t, GSI1PK = :gsi'
@@ -177,8 +197,9 @@ def complete_task(task_id: str, after_image_key: str, worker_notes: str = '') ->
     Saves the after_image_key so the validation Lambda can compare before/after.
     """
     now = _now()
+    key = _find_task_key(task_id)
     table.update_item(
-        Key={'PK': f'TASK#{task_id}', 'SK': 'META'},
+        Key=key,
         UpdateExpression=(
             'SET #st = :s, after_image_key = :after, '
             'worker_notes = :notes, completed_at = :t, '
@@ -211,8 +232,9 @@ def update_task_status(task_id: str, new_status: str, notes: str = '') -> dict:
         raise ValueError(f"Invalid status '{new_status}'. Must be one of: {sorted(valid)}")
 
     now = _now()
+    key = _find_task_key(task_id)
     table.update_item(
-        Key={'PK': f'TASK#{task_id}', 'SK': 'META'},
+        Key=key,
         UpdateExpression=(
             'SET #st = :s, updated_at = :t, worker_notes = :n, GSI1PK = :gsi'
         ),

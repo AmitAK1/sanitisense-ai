@@ -32,15 +32,14 @@ import {
 
 const WorkerTaskMap = dynamic(() => import('@/app/components/WorkerTaskMap'), { ssr: false });
 
-function getWorkerId(): string {
-  if (typeof window !== 'undefined') {
-    return localStorage.getItem('sanitisense_worker_id') || 'W-001';
-  }
-  return 'W-001';
-}
-
 export default function WorkerDashboard() {
-  const [workerId] = useState(getWorkerId);
+  const [workerId, setWorkerId] = useState('W-001');
+
+  // Read localStorage only on client after mount to avoid hydration mismatch
+  useEffect(() => {
+    const stored = localStorage.getItem('sanitisense_worker_id');
+    if (stored) setWorkerId(stored);
+  }, []);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
   const [filterStatus, setFilterStatus] = useState('pending');
@@ -104,18 +103,20 @@ export default function WorkerDashboard() {
         // Simple status update (start task, etc.)
         await updateTask(taskId, { status: newStatus, notes: workerNotes });
       }
+      // Close modal and switch to the new status tab
+      // The useEffect on filterStatus will re-fetch the correct list
       setSelectedTask(null);
       setWorkerNotes('');
       setAfterPhoto('');
       setAfterPhotoFile(null);
       setValidationResult(null);
-      loadTasks();
+      setTasks([]);  // Clear stale list so user sees loading spinner
+      setFilterStatus(newStatus);
     } catch {
-      // Optimistic update for demo
-      setTasks((prev) =>
-        prev.map((t) => (t.task_id === taskId ? { ...t, status: newStatus } : t))
-      );
+      // API call failed — optimistic update for demo, still switch tab
       setSelectedTask(null);
+      setTasks([]);
+      setFilterStatus(newStatus);
     } finally {
       setUpdating(false);
     }
@@ -226,9 +227,9 @@ export default function WorkerDashboard() {
         {/* Task list */}
         {!loading && tasks.length > 0 && (
           <div className="space-y-3">
-            {tasks.map((task) => (
+            {tasks.map((task, idx) => (
               <div
-                key={task.task_id}
+                key={task.task_id || `task-${idx}`}
                 onClick={() => setSelectedTask(task)}
                 className="bg-white rounded-xl border border-gray-200 p-4 hover:shadow-md transition-shadow cursor-pointer"
               >
