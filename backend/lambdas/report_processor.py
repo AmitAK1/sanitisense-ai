@@ -143,43 +143,105 @@ def analyze_image_from_s3(image_key: str) -> dict:
             body=json.dumps(request_body)
         )
         result = json.loads(bedrock_response['body'].read())
-        return json.loads(result['content'][0]['text'])
+        parsed = json.loads(result['content'][0]['text'])
+        parsed['_analysis_mode'] = 'bedrock'
+        return parsed
 
     except Exception as bedrock_err:
         print(f"[FALLBACK] Bedrock unavailable: {bedrock_err}")
-        print("[FALLBACK] Using smart mock classification based on image metadata")
-        return _smart_mock_classification(image_key, len(image_bytes))
+        print("[REKOGNITION] Falling back to Amazon Rekognition label detection")
+        return _rekognition_classification(image_bytes)
 
 
-def _smart_mock_classification(image_key: str, file_size: int) -> dict:
+def _rekognition_classification(image_bytes: bytes) -> dict:
     """
-    Smart fallback when Bedrock is unavailable (payment/access issues).
-    Uses file metadata + randomized realistic classification.
-    Returns the same JSON structure as Bedrock would.
+    Real AI fallback using Amazon Rekognition DetectLabels.
+    Sends actual image pixels to Rekognition, maps detected object labels
+    to sanitation categories, severity and health risk.
+    Works with UPI billing — no Bedrock/Marketplace subscription needed.
     """
-    import random
-    import hashlib
+    rekognition = boto3.client('rekognition', region_name=os.environ.get('AWS_REGION', 'us-east-1'))
 
-    # Use image_key hash for deterministic but varied results
-    key_hash = int(hashlib.md5(image_key.encode()).hexdigest()[:8], 16)
-    random.seed(key_hash)
+    try:
+        rek_response = rekognition.detect_labels(
+            Image={'Bytes': image_bytes},
+            MaxLabels=20,
+            MinConfidence=55,
+        )
+        labels = [l['Name'].lower() for l in rek_response['Labels']]
+        top_labels = [l['Name'] for l in rek_response['Labels']]  # preserve original case for description
+        avg_confidence = sum(l['Confidence'] for l in rek_response['Labels']) / max(len(rek_response['Labels']), 1)
+        print(f"[REKOGNITION] Detected labels: {top_labels}")
+    except Exception as rek_err:
+        print(f"[REKOGNITION] Failed: {rek_err}. Using last-resort static fallback.")
+        return _static_fallback()
 
-    categories = ['garbage_pile', 'overflowing_drain', 'blocked_sewer', 'stagnant_water', 'medical_waste', 'animal_carcass']
-    weights = [30, 22, 18, 15, 8, 7]
-    category = random.choices(categories, weights=weights, k=1)[0]
+    # ── Spam detection ────────────────────────────────────────────────────
+    spam_indicators = {'person', 'human', 'face', 'selfie', 'food', 'drink',
+                       'beverage', 'meal', 'restaurant', 'indoors', 'furniture',
+                       'electronics', 'computer', 'phone', 'vehicle', 'car', 'text', 'document'}
+    sanitation_indicators = {'garbage', 'waste', 'trash', 'litter', 'debris', 'dirt',
+                             'water', 'flood', 'drain', 'sewer', 'animal', 'carcass',
+                             'pollution', 'contamination', 'mud', 'sewage', 'puddle',
+                             'plastic', 'bag', 'pile', 'dump', 'rubbish', 'filth'}
+    label_set = set(labels)
+    has_spam = bool(label_set & spam_indicators)
+    has_sanitation = bool(label_set & sanitation_indicators)
 
-    severity = random.choices(range(3, 10), weights=[5, 10, 15, 20, 20, 15, 15], k=1)[0]
+    # Only mark spam if no sanitation content at all
+    if has_spam and not has_sanitation:
+        return {
+            'is_spam': True,
+            'category': 'other',
+            'severity_score': 0,
+            'description': 'Image does not appear to show a sanitation issue.',
+            'health_risk': 'none',
+            'confidence': round(avg_confidence / 100, 2),
+            '_analysis_mode': 'rekognition',
+        }
 
-    descriptions = {
-        'garbage_pile': 'Accumulation of mixed waste detected in the area. Organic and plastic waste visible, requiring immediate cleanup.',
-        'overflowing_drain': 'Drain appears to be overflowing with grey water. Water flowing onto pedestrian areas poses hygiene risk.',
-        'blocked_sewer': 'Sewer line blockage detected. Sewage backup visible which may contaminate surrounding area.',
-        'stagnant_water': 'Stagnant water pooling detected. Standing water is a breeding ground for mosquitoes and disease vectors.',
-        'medical_waste': 'Medical waste materials identified in the area. Biohazard risk requires specialized disposal.',
-        'animal_carcass': 'Animal remains detected in the area. Decomposition poses health risk to nearby residents.',
+    # ── Category mapping — scored by label matches ────────────────────────
+    category_rules = {
+        'garbage_pile':     ['garbage', 'waste', 'trash', 'litter', 'debris', 'rubbish',
+                             'plastic', 'bag', 'pile', 'dump', 'filth', 'bin', 'container'],
+        'stagnant_water':   ['water', 'flood', 'puddle', 'pool', 'flooding', 'waterlogged',
+                             'liquid', 'mud', 'swamp', 'wetland'],
+        'overflowing_drain':['drain', 'gutter', 'overflow', 'flooding', 'water', 'pipe',
+                             'sewer', 'manhole', 'channel'],
+        'blocked_sewer':    ['sewer', 'sewage', 'manhole', 'pipe', 'blockage', 'drain',
+                             'overflow', 'contamination'],
+        'medical_waste':    ['medical', 'hospital', 'syringe', 'needle', 'bandage', 'glove',
+                             'biohazard', 'clinical', 'pharmaceutical'],
+        'animal_carcass':   ['animal', 'carcass', 'dead', 'dog', 'cat', 'bird', 'rat',
+                             'wildlife', 'mammal', 'reptile'],
     }
 
-    health_risks = {
+    scores = {cat: 0 for cat in category_rules}
+    for cat, keywords in category_rules.items():
+        for keyword in keywords:
+            if any(keyword in lbl for lbl in labels):
+                scores[cat] += 1
+
+    best_category = max(scores, key=scores.get)
+    best_score = scores[best_category]
+
+    # If no category matched at all, default to garbage_pile (most common)
+    if best_score == 0:
+        best_category = 'garbage_pile'
+
+    # ── Severity from label count + category weight ───────────────────────
+    category_base_severity = {
+        'garbage_pile': 5,
+        'overflowing_drain': 6,
+        'blocked_sewer': 7,
+        'stagnant_water': 6,
+        'medical_waste': 9,
+        'animal_carcass': 8,
+    }
+    severity = min(10, category_base_severity.get(best_category, 5) + min(best_score - 1, 2))
+
+    # ── Health risk ───────────────────────────────────────────────────────
+    health_risk_map = {
         'garbage_pile': 'medium' if severity < 7 else 'high',
         'overflowing_drain': 'medium' if severity < 7 else 'high',
         'blocked_sewer': 'high',
@@ -188,14 +250,39 @@ def _smart_mock_classification(image_key: str, file_size: int) -> dict:
         'animal_carcass': 'high',
     }
 
+    # ── Description from actual detected labels ───────────────────────────
+    visible = ', '.join(top_labels[:5]) if top_labels else 'sanitation issue'
+    description_templates = {
+        'garbage_pile': f'Waste accumulation detected in the area. Visual analysis identified: {visible}. Immediate cleanup required to prevent health hazards.',
+        'stagnant_water': f'Standing water detected. Visual analysis identified: {visible}. Stagnant water poses mosquito breeding and contamination risk.',
+        'overflowing_drain': f'Drain overflow detected. Visual analysis identified: {visible}. Blocked drainage causing water accumulation on the surface.',
+        'blocked_sewer': f'Sewer blockage detected. Visual analysis identified: {visible}. Sewage backup risk may contaminate surrounding area.',
+        'medical_waste': f'Medical waste detected in open area. Visual analysis identified: {visible}. Biohazard risk requires specialized disposal team.',
+        'animal_carcass': f'Animal remains detected. Visual analysis identified: {visible}. Health risk to nearby residents from decomposition.',
+    }
+
     return {
         'is_spam': False,
-        'category': category,
+        'category': best_category,
         'severity_score': severity,
-        'description': descriptions.get(category, 'Sanitation issue detected requiring attention.'),
-        'health_risk': health_risks.get(category, 'medium'),
-        'confidence': round(random.uniform(0.72, 0.91), 2),
-        '_analysis_mode': 'smart_fallback',  # Flag so we know this was a fallback
+        'description': description_templates.get(best_category, f'Sanitation issue detected. Visual analysis identified: {visible}.'),
+        'health_risk': health_risk_map.get(best_category, 'medium'),
+        'confidence': round(min(avg_confidence / 100, 0.95), 2),
+        'rekognition_labels': top_labels,
+        '_analysis_mode': 'rekognition',
+    }
+
+
+def _static_fallback() -> dict:
+    """Last resort if both Bedrock and Rekognition fail."""
+    return {
+        'is_spam': False,
+        'category': 'garbage_pile',
+        'severity_score': 5,
+        'description': 'Sanitation issue reported by citizen. Manual inspection required.',
+        'health_risk': 'medium',
+        'confidence': 0.5,
+        '_analysis_mode': 'static_fallback',
     }
 
 
