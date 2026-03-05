@@ -353,6 +353,19 @@ export default function WorkerDashboard() {
                 </div>
               </div>
 
+              {/* Navigate button */}
+              {selectedTask.location && (
+                <a
+                  href={`https://maps.google.com/?daddr=${selectedTask.location.lat},${selectedTask.location.lng}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center justify-center gap-2 w-full py-2.5 rounded-xl bg-blue-600 text-white font-medium text-sm hover:bg-blue-700 active:scale-95 transition-all"
+                >
+                  <Navigation className="h-4 w-4" />
+                  Navigate to Location
+                </a>
+              )}
+
               <div className="bg-gray-50 p-3 rounded-lg text-sm">
                 <span className="text-gray-500 block mb-1">Description</span>
                 <p className="text-gray-700">{selectedTask.description}</p>

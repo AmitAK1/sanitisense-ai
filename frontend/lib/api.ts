@@ -79,6 +79,8 @@ export interface ReportSubmission {
   latitude: number;
   longitude: number;
   voice_key?: string;
+  description?: string;
+  ward_number?: number;
 }
 
 export interface ReportResponse {
@@ -245,7 +247,9 @@ function normalizeTask(raw: Record<string, unknown>): Task {
     ward_name: (raw.ward_name || '') as string,
     location: raw.location
       ? { lat: String((raw.location as Record<string, unknown>).lat || '0'), lng: String((raw.location as Record<string, unknown>).lng || '0') }
-      : undefined,
+      : (raw.latitude && raw.longitude)
+        ? { lat: String(raw.latitude), lng: String(raw.longitude) }
+        : undefined,
   };
 }
 

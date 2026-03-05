@@ -134,6 +134,8 @@ export default function ReportPage() {
         latitude: location.latitude,
         longitude: location.longitude,
         ...(voiceKey && { voice_key: voiceKey }),
+        ...(description && { description }),
+        ward_number: Math.floor((location.latitude * 1000 + location.longitude * 1000) % 30) + 1,
       });
       setResult(res);
       setStep('result');
