@@ -97,7 +97,6 @@ export default function ReportPage() {
           address: `${pos.coords.latitude.toFixed(4)}°N, ${pos.coords.longitude.toFixed(4)}°E`,
         });
         setGettingLocation(false);
-        setStep('review');
       },
       (err) => {
         // Fallback to Mumbai center if denied
@@ -107,7 +106,6 @@ export default function ReportPage() {
           address: 'Mumbai, Maharashtra (default)',
         });
         setGettingLocation(false);
-        setStep('review');
       },
       { enableHighAccuracy: true, timeout: 10000 }
     );
