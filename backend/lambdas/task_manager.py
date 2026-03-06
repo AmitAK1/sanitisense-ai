@@ -163,6 +163,35 @@ def get_worker_tasks(worker_id: str) -> list:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Helper: mirror task status back to the parent REPORT item
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _sync_report_status(report_ticket: str, new_status: str, now: str) -> None:
+    """
+    Update the parent REPORT item's status so the /track citizen page
+    always reflects reality. Silently swallows errors — task update
+    must not fail just because the linked report can't be found.
+    """
+    if not report_ticket:
+        return
+    try:
+        table.update_item(
+            Key={'PK': f'REPORT#{report_ticket}', 'SK': 'META'},
+            UpdateExpression='SET #st = :s, updated_at = :t, GSI1PK = :gsi',
+            ConditionExpression='attribute_exists(PK)',
+            ExpressionAttributeNames={'#st': 'status'},
+            ExpressionAttributeValues={
+                ':s': new_status,
+                ':t': now,
+                ':gsi': f'STATUS#{new_status}',
+            },
+        )
+        print(f'[SYNC] Report {report_ticket} → {new_status}')
+    except Exception as e:
+        print(f'[WARN] Could not sync report {report_ticket} status: {e}')
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # POST /tasks/{task_id}/start — worker starts working
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -170,6 +199,8 @@ def start_task(task_id: str, worker_id: str) -> dict:
     """Assign task to worker and set status to in_progress."""
     now = _now()
     key = _find_task_key(task_id)
+    # Read item FIRST so we can grab report_ticket for status sync
+    task_item = table.get_item(Key=key).get('Item', {})
     table.update_item(
         Key=key,
         UpdateExpression=(
@@ -184,6 +215,7 @@ def start_task(task_id: str, worker_id: str) -> dict:
             ':gsi': 'STATUS#in_progress',
         }
     )
+    _sync_report_status(task_item.get('report_ticket', ''), 'in_progress', now)
     return {'task_id': task_id, 'status': 'in_progress', 'worker_id': worker_id}
 
 
@@ -198,6 +230,7 @@ def complete_task(task_id: str, after_image_key: str, worker_notes: str = '') ->
     """
     now = _now()
     key = _find_task_key(task_id)
+    task_item = table.get_item(Key=key).get('Item', {})
     table.update_item(
         Key=key,
         UpdateExpression=(
@@ -214,6 +247,7 @@ def complete_task(task_id: str, after_image_key: str, worker_notes: str = '') ->
             ':gsi': 'STATUS#completed',
         }
     )
+    _sync_report_status(task_item.get('report_ticket', ''), 'completed', now)
     return {
         'task_id': task_id,
         'status': 'completed',
@@ -233,6 +267,7 @@ def update_task_status(task_id: str, new_status: str, notes: str = '') -> dict:
 
     now = _now()
     key = _find_task_key(task_id)
+    task_item = table.get_item(Key=key).get('Item', {})
     table.update_item(
         Key=key,
         UpdateExpression=(
@@ -246,6 +281,7 @@ def update_task_status(task_id: str, new_status: str, notes: str = '') -> dict:
             ':gsi': f'STATUS#{new_status}',
         }
     )
+    _sync_report_status(task_item.get('report_ticket', ''), new_status, now)
     return {'task_id': task_id, 'status': new_status, 'updated_at': now}
 
 
