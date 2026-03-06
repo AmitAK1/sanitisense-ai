@@ -245,6 +245,11 @@ export default function WorkerDashboard() {
                         {priorityLabel(task.priority)}
                       </span>
                       <span className="text-xs text-gray-500 font-mono">{task.task_id}</span>
+                      {task.report_id && (
+                        <span className="text-xs text-emerald-600 font-mono bg-emerald-50 px-1.5 py-0.5 rounded">
+                          {task.report_id}
+                        </span>
+                      )}
                     </div>
                     <h3 className="font-medium text-gray-900 text-sm">
                       {CATEGORY_LABELS[task.category] || task.category}
@@ -322,6 +327,14 @@ export default function WorkerDashboard() {
                   <span className="text-gray-500">Task ID</span>
                   <span className="font-mono font-medium">{selectedTask.task_id}</span>
                 </div>
+                {selectedTask.report_id && (
+                  <div className="flex justify-between text-sm items-center">
+                    <span className="text-gray-500">Citizen Ticket</span>
+                    <span className="font-mono font-medium text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded">
+                      {selectedTask.report_id}
+                    </span>
+                  </div>
+                )}
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-500">Category</span>
                   <span className="font-medium">
