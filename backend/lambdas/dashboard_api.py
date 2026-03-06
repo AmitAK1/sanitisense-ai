@@ -284,27 +284,36 @@ def get_trend_data(reports, days=7):
 # ─────────────────────────────────────────────────────────────────────────────
 
 def get_worker_leaderboard(reports, limit=10):
-    """Top workers by completed tasks — from real data."""
+    """Top workers by completed tasks — scans TASK items (worker assignments live there)."""
     worker_stats = defaultdict(lambda: {'completed': 0, 'total_hours': 0, 'count': 0})
 
-    for r in reports:
-        worker = r.get('assigned_worker_id') or r.get('worker_name', '')
+    # Worker assignments are on TASK# items, not on REPORT# items
+    try:
+        task_resp = table.scan(
+            FilterExpression=(
+                Attr('PK').begins_with('TASK#') &
+                Attr('SK').eq('META') &
+                Attr('status').is_in(['completed', 'verified'])
+            )
+        )
+        tasks = task_resp.get('Items', [])
+    except Exception:
+        tasks = []
+
+    for t in tasks:
+        worker = t.get('assigned_worker_id', '')
         if not worker:
             continue
-        if r.get('status') in ('completed', 'verified'):
-            worker_stats[worker]['completed'] += 1
-            # Also store worker name if available
-            if r.get('worker_name'):
-                worker_stats[worker]['name'] = r['worker_name']
-            try:
-                created = datetime.fromisoformat(r['created_at'].replace('Z', ''))
-                updated = datetime.fromisoformat(r['updated_at'].replace('Z', ''))
-                hours = (updated - created).total_seconds() / 3600
-                if 0 < hours < 168:
-                    worker_stats[worker]['total_hours'] += hours
-                    worker_stats[worker]['count'] += 1
-            except (KeyError, ValueError):
-                pass
+        worker_stats[worker]['completed'] += 1
+        try:
+            created = datetime.fromisoformat(t['created_at'].replace('Z', ''))
+            updated = datetime.fromisoformat(t['updated_at'].replace('Z', ''))
+            hours = (updated - created).total_seconds() / 3600
+            if 0 < hours < 168:
+                worker_stats[worker]['total_hours'] += hours
+                worker_stats[worker]['count'] += 1
+        except (KeyError, ValueError):
+            pass
 
     # Look up worker names from WORKER# profiles
     worker_names = {}
