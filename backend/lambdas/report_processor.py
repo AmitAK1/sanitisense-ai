@@ -418,6 +418,69 @@ def get_report(ticket_id: str) -> dict | None:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# PUT /reports/{ticket_id}/rate — citizen rates the resolved complaint
+# ─────────────────────────────────────────────────────────────────────────────
+
+def rate_report(ticket_id: str, rating: int, feedback: str = '') -> dict:
+    """
+    Citizen submits a 1-5 star rating for a resolved complaint.
+    - Saves citizen_rating to the REPORT item
+    - Finds the associated TASK and its assigned worker
+    - Updates the WORKER profile's avg_rating with a rolling average
+    """
+    if not (1 <= rating <= 5):
+        raise ValueError('Rating must be between 1 and 5')
+
+    report = table.get_item(Key={'PK': f'REPORT#{ticket_id}', 'SK': 'META'}).get('Item')
+    if not report:
+        raise ValueError(f'Ticket {ticket_id} not found')
+
+    # Idempotent: return existing rating if already submitted
+    if report.get('citizen_rating'):
+        return {
+            'ticket_id': ticket_id,
+            'rating': int(report['citizen_rating']),
+            'message': 'Already rated',
+            'already_rated': True,
+        }
+
+    now = _now()
+    table.update_item(
+        Key={'PK': f'REPORT#{ticket_id}', 'SK': 'META'},
+        UpdateExpression='SET citizen_rating = :r, citizen_feedback = :f, rated_at = :t',
+        ExpressionAttributeValues={':r': rating, ':f': feedback, ':t': now},
+    )
+
+    # Find the task linked to this report to get the assigned worker
+    task_resp = table.scan(
+        FilterExpression=Attr('report_ticket').eq(ticket_id) & Attr('SK').eq('META')
+    )
+    tasks = task_resp.get('Items', [])
+    if tasks:
+        assigned_worker = tasks[0].get('assigned_worker_id')
+        if assigned_worker:
+            # Rolling average: new_avg = (old_avg * old_count + rating) / new_count
+            prof_resp = table.get_item(
+                Key={'PK': f'WORKER#{assigned_worker}', 'SK': 'PROFILE'}
+            )
+            profile = prof_resp.get('Item', {})
+            old_avg = float(profile.get('avg_rating') or 0)
+            old_count = int(profile.get('rating_count') or 0)
+            new_count = old_count + 1
+            new_avg = round((old_avg * old_count + rating) / new_count, 2)
+            table.update_item(
+                Key={'PK': f'WORKER#{assigned_worker}', 'SK': 'PROFILE'},
+                UpdateExpression='SET avg_rating = :r, rating_count = :c',
+                ExpressionAttributeValues={
+                    ':r': Decimal(str(new_avg)),
+                    ':c': new_count,
+                },
+            )
+
+    return {'ticket_id': ticket_id, 'rating': rating, 'message': 'Thank you for your feedback!'}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Handler — route by HTTP method + path
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -442,6 +505,15 @@ def handler(event, context):
             if report is None:
                 return _response(404, {'error': f'Ticket {ticket_id} not found'})
             return _response(200, report)
+
+        # PUT /reports/{ticket_id}/rate
+        elif method == 'PUT' and path_params.get('ticket_id') and path.endswith('/rate'):
+            ticket_id = path_params['ticket_id'].upper()
+            raw_rating = body.get('rating')
+            if raw_rating is None:
+                return _response(400, {'error': 'rating is required'})
+            result = rate_report(ticket_id, int(raw_rating), body.get('feedback', ''))
+            return _response(200, result)
 
         # GET /reports
         elif method == 'GET' and '/reports' in path:

@@ -107,6 +107,12 @@ Resources:
             RestApiId: !Ref SanitiSenseApi
             Path: /reports/{ticket_id}
             Method: get
+        RateReport:
+          Type: Api
+          Properties:
+            RestApiId: !Ref SanitiSenseApi
+            Path: /reports/{ticket_id}/rate
+            Method: put
 
   # ── Lambda: task_manager ──────────────────────────────────────────────────────
   TaskManagerFunction:

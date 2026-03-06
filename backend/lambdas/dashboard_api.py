@@ -308,6 +308,7 @@ def get_worker_leaderboard(reports, limit=10):
 
     # Look up worker names from WORKER# profiles
     worker_names = {}
+    worker_ratings: dict = {}  # wid -> real avg_rating from PROFILE
     try:
         profile_resp = table.scan(
             FilterExpression=Attr('PK').begins_with('WORKER#') & Attr('SK').eq('PROFILE')
@@ -316,6 +317,9 @@ def get_worker_leaderboard(reports, limit=10):
             wid = p.get('worker_id', '')
             if wid:
                 worker_names[wid] = p.get('name', f'Worker {wid}')
+                raw_rating = p.get('avg_rating')
+                if raw_rating:
+                    worker_ratings[wid] = float(raw_rating)
     except Exception:
         pass
 
@@ -323,11 +327,12 @@ def get_worker_leaderboard(reports, limit=10):
     for wid, stats in worker_stats.items():
         avg_hours = round(stats['total_hours'] / stats['count'], 1) if stats['count'] else 0
         name = stats.get('name') or worker_names.get(wid, f'Worker {wid[-4:]}')
+        real_rating = worker_ratings.get(wid)
         workers.append({
             'worker_id': wid,
             'name': name,
             'completed_this_week': stats['completed'],
-            'avg_rating': round(3.5 + min(stats['completed'], 5) * 0.3, 1),
+            'avg_rating': real_rating if real_rating is not None else round(3.5 + min(stats['completed'], 5) * 0.3, 1),
             'avg_resolution_hours': avg_hours
         })
 

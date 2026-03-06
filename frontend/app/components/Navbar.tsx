@@ -10,6 +10,7 @@ type UserRole = 'citizen' | 'worker' | 'admin' | null;
 const allNavLinks = [
   { href: '/', label: 'Home', roles: ['citizen', 'worker', 'admin', null] },
   { href: '/report', label: 'Report Issue', roles: ['citizen', 'admin'] },
+  { href: '/track', label: 'My Reports', roles: ['citizen', null] },
   { href: '/worker', label: 'Worker Dashboard', roles: ['worker', 'admin'] },
   { href: '/dashboard', label: 'Admin Dashboard', roles: ['admin'] },
 ];

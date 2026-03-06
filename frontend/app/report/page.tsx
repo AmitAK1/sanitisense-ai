@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useRef, useCallback } from 'react';
+import Link from 'next/link';
 import {
   Camera,
   MapPin,
@@ -583,9 +584,16 @@ export default function ReportPage() {
               </div>
             </div>
 
+            <Link
+              href="/track"
+              className="mt-4 w-full flex items-center justify-center gap-2 border border-emerald-600 text-emerald-700 font-semibold py-3 rounded-xl hover:bg-emerald-50 transition-colors"
+            >
+              <FileText className="h-5 w-5" />
+              Track My Reports
+            </Link>
             <button
               onClick={resetForm}
-              className="mt-6 w-full flex items-center justify-center gap-2 bg-emerald-600 text-white font-semibold py-3 rounded-xl hover:bg-emerald-700"
+              className="mt-3 w-full flex items-center justify-center gap-2 bg-emerald-600 text-white font-semibold py-3 rounded-xl hover:bg-emerald-700"
             >
               <Camera className="h-5 w-5" />
               Report Another Issue

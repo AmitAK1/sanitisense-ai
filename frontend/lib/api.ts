@@ -291,6 +291,30 @@ export const fetchEpidemicAdvisory = (ward: number) =>
 export const fetchCityOverview = () =>
   apiFetch<CityOverview>('/epidemic/city-overview');
 
+// ── Report detail + citizen rating ─────────────────────────────────────────────────────
+
+export interface ReportDetail {
+  ticket_id: string;
+  status: string;
+  category: string;
+  description: string;
+  created_at: string;
+  updated_at: string;
+  ward_number: number;
+  severity_score: number;
+  health_risk: string;
+  citizen_rating?: number;
+}
+
+export const fetchReport = (ticketId: string) =>
+  apiFetch<ReportDetail>(`/reports/${ticketId.toUpperCase()}`);
+
+export const rateReport = (ticketId: string, rating: number, feedback = '') =>
+  apiFetch<{ ticket_id: string; rating: number; message: string; already_rated?: boolean }>(
+    `/reports/${ticketId}/rate`,
+    { method: 'PUT', body: JSON.stringify({ rating, feedback }) }
+  );
+
 // S3 Upload helper — generates a presigned-style path
 export function getS3UploadKey(filename: string): string {
   const now = new Date();
