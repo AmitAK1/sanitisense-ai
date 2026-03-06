@@ -260,7 +260,7 @@ def complete_task(task_id: str, after_image_key: str, worker_notes: str = '') ->
 # PUT /tasks/{task_id} — generic status update
 # ─────────────────────────────────────────────────────────────────────────────
 
-def update_task_status(task_id: str, new_status: str, notes: str = '') -> dict:
+def update_task_status(task_id: str, new_status: str, notes: str = '', worker_id: str = '') -> dict:
     valid = {'pending', 'assigned', 'in_progress', 'completed', 'verified', 'rejected'}
     if new_status not in valid:
         raise ValueError(f"Invalid status '{new_status}'. Must be one of: {sorted(valid)}")
@@ -268,18 +268,24 @@ def update_task_status(task_id: str, new_status: str, notes: str = '') -> dict:
     now = _now()
     key = _find_task_key(task_id)
     task_item = table.get_item(Key=key).get('Item', {})
+
+    update_expr = 'SET #st = :s, updated_at = :t, worker_notes = :n, GSI1PK = :gsi'
+    expr_values = {
+        ':s': new_status,
+        ':t': now,
+        ':n': notes,
+        ':gsi': f'STATUS#{new_status}',
+    }
+    # Save the worker ID if provided and not already set
+    if worker_id and not task_item.get('assigned_worker_id'):
+        update_expr += ', assigned_worker_id = :w'
+        expr_values[':w'] = worker_id
+
     table.update_item(
         Key=key,
-        UpdateExpression=(
-            'SET #st = :s, updated_at = :t, worker_notes = :n, GSI1PK = :gsi'
-        ),
+        UpdateExpression=update_expr,
         ExpressionAttributeNames={'#st': 'status'},
-        ExpressionAttributeValues={
-            ':s': new_status,
-            ':t': now,
-            ':n': notes,
-            ':gsi': f'STATUS#{new_status}',
-        }
+        ExpressionAttributeValues=expr_values,
     )
     _sync_report_status(task_item.get('report_ticket', ''), new_status, now)
     return {'task_id': task_id, 'status': new_status, 'updated_at': now}
@@ -363,7 +369,12 @@ def handler(event, context):
 
         # PUT /tasks/{id}
         elif method == 'PUT' and task_id:
-            result = update_task_status(task_id, body.get('status', ''), body.get('notes', ''))
+            result = update_task_status(
+                task_id,
+                body.get('status', ''),
+                body.get('notes', ''),
+                body.get('worker_id', ''),
+            )
             return _response(200, result)
 
         return _response(404, {'error': 'Route not found'})

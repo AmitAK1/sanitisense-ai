@@ -82,7 +82,7 @@ export default function WorkerDashboard() {
         const afterKey = await uploadImageToS3(afterPhotoFile, 'worker');
 
         // Step 2: Update task with after_image_key
-        await updateTask(taskId, { status: 'completed', notes: workerNotes });
+        await updateTask(taskId, { status: 'completed', notes: workerNotes, worker_id: workerId });
 
         // Step 3: Call validation endpoint (before/after AI comparison)
         try {
@@ -101,7 +101,7 @@ export default function WorkerDashboard() {
         }
       } else {
         // Simple status update (start task, etc.)
-        await updateTask(taskId, { status: newStatus, notes: workerNotes });
+        await updateTask(taskId, { status: newStatus, notes: workerNotes, worker_id: workerId });
       }
       // Close modal and switch to the new status tab
       // The useEffect on filterStatus will re-fetch the correct list

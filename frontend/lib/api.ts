@@ -163,7 +163,7 @@ export const fetchTasks = async (status = 'pending'): Promise<Task[]> => {
     .filter((t) => t.task_id || t.report_id)   // skip phantom records with no IDs
     .map(normalizeTask);
 };
-export const updateTask = (taskId: string, data: { status: string; notes?: string }) =>
+export const updateTask = (taskId: string, data: { status: string; notes?: string; worker_id?: string }) =>
   apiFetch<{ task_id: string; status: string }>(`/tasks/${taskId}`, {
     method: 'PUT',
     body: JSON.stringify(data),
