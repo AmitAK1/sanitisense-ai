@@ -53,6 +53,13 @@ import {
   type EpidemicAdvisory,
 } from '@/lib/api';
 
+// Maps backend data_source values to user-friendly labels
+const DATA_SOURCE_LABELS: Record<string, string> = {
+  rag: '🧠 AI + Knowledge Base (RAG)',
+  bedrock_direct: '🧠 AI (Claude Sonnet 4)',
+  heuristic_fallback: '⚠️ Heuristic (Bedrock unavailable)',
+};
+
 export default function AdminDashboard() {
   const [dashboard, setDashboard] = useState<FullDashboard | null>(null);
   const [loading, setLoading] = useState(true);
@@ -72,7 +79,7 @@ export default function AdminDashboard() {
       const data = await fetchDashboard();
       setDashboard(data);
       // Also fetch city epidemic overview (non-blocking)
-      fetchCityOverview().then(setCityOverview).catch(() => {});
+      fetchCityOverview().then(setCityOverview).catch(() => { });
     } catch {
       // Use fallback data
       setDashboard(getFallbackDashboard());
@@ -291,24 +298,22 @@ export default function AdminDashboard() {
               .map((ward) => (
                 <div
                   key={ward.ward_number}
-                  className={`rounded-lg p-2.5 text-xs border ${
-                    ward.risk_level === 'high'
-                      ? 'border-red-200 bg-red-50'
-                      : ward.risk_level === 'medium'
+                  className={`rounded-lg p-2.5 text-xs border ${ward.risk_level === 'high'
+                    ? 'border-red-200 bg-red-50'
+                    : ward.risk_level === 'medium'
                       ? 'border-amber-200 bg-amber-50'
                       : 'border-green-200 bg-green-50'
-                  }`}
+                    }`}
                 >
                   <div className="font-semibold text-gray-900 truncate">{ward.name}</div>
                   <div className="text-gray-500 mt-0.5">{ward.open_reports} open · {ward.severity_avg} avg</div>
                   <span
-                    className={`inline-block mt-1 text-[10px] font-bold px-1.5 py-0.5 rounded-full ${
-                      ward.risk_level === 'high'
-                        ? 'bg-red-100 text-red-700'
-                        : ward.risk_level === 'medium'
+                    className={`inline-block mt-1 text-[10px] font-bold px-1.5 py-0.5 rounded-full ${ward.risk_level === 'high'
+                      ? 'bg-red-100 text-red-700'
+                      : ward.risk_level === 'medium'
                         ? 'bg-amber-100 text-amber-700'
                         : 'bg-green-100 text-green-700'
-                    }`}
+                      }`}
                   >
                     {ward.risk_level.toUpperCase()}
                   </span>
@@ -324,11 +329,10 @@ export default function AdminDashboard() {
             <AlertTriangle className="h-5 w-5 text-red-500" />
             Epidemic Risk Advisory
             {cityOverview && (
-              <span className={`ml-2 text-xs font-bold px-2 py-0.5 rounded-full ${
-                cityOverview.overall_risk === 'high' ? 'bg-red-100 text-red-700'
+              <span className={`ml-2 text-xs font-bold px-2 py-0.5 rounded-full ${cityOverview.overall_risk === 'high' ? 'bg-red-100 text-red-700'
                 : cityOverview.overall_risk === 'medium' ? 'bg-amber-100 text-amber-700'
-                : 'bg-green-100 text-green-700'
-              }`}>
+                  : 'bg-green-100 text-green-700'
+                }`}>
                 {cityOverview.overall_risk.toUpperCase()} RISK
               </span>
             )}
@@ -375,11 +379,22 @@ export default function AdminDashboard() {
                 <h4 className="font-semibold text-amber-800">
                   Ward {selectedWardAdvisory.ward_number} — {selectedWardAdvisory.risk_level.toUpperCase()} Risk
                 </h4>
-                <span className="text-[10px] text-gray-400">
-                  Source: {selectedWardAdvisory.data_source}
+                <span
+                  className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${selectedWardAdvisory.data_source === 'heuristic_fallback'
+                    ? 'bg-amber-100 text-amber-700'
+                    : 'bg-emerald-50 text-emerald-700'
+                    }`}
+                >
+                  {DATA_SOURCE_LABELS[selectedWardAdvisory.data_source] ?? selectedWardAdvisory.data_source}
                 </span>
               </div>
               <p className="text-sm text-gray-700">{selectedWardAdvisory.advisory}</p>
+
+              {selectedWardAdvisory.data_source === 'heuristic_fallback' && (
+                <p className="text-xs text-amber-600 italic border-t border-amber-200 pt-2">
+                  ℹ️ This advisory uses data patterns, not live AI — it will upgrade to AI-generated once Bedrock access is confirmed.
+                </p>
+              )}
 
               {selectedWardAdvisory.diseases_at_risk.length > 0 && (
                 <div>
@@ -457,13 +472,12 @@ export default function AdminDashboard() {
                         <td className="py-2.5">{ward.severity_avg}</td>
                         <td className="py-2.5">
                           <span
-                            className={`text-xs font-bold px-2 py-0.5 rounded-full ${
-                              ward.risk_level === 'high'
-                                ? 'bg-red-100 text-red-700'
-                                : ward.risk_level === 'medium'
+                            className={`text-xs font-bold px-2 py-0.5 rounded-full ${ward.risk_level === 'high'
+                              ? 'bg-red-100 text-red-700'
+                              : ward.risk_level === 'medium'
                                 ? 'bg-amber-100 text-amber-700'
                                 : 'bg-green-100 text-green-700'
-                            }`}
+                              }`}
                           >
                             {ward.risk_level.toUpperCase()}
                           </span>
@@ -488,15 +502,14 @@ export default function AdminDashboard() {
                   className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg"
                 >
                   <div
-                    className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${
-                      i === 0
-                        ? 'bg-amber-100 text-amber-700'
-                        : i === 1
+                    className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${i === 0
+                      ? 'bg-amber-100 text-amber-700'
+                      : i === 1
                         ? 'bg-gray-200 text-gray-700'
                         : i === 2
-                        ? 'bg-orange-100 text-orange-700'
-                        : 'bg-gray-100 text-gray-500'
-                    }`}
+                          ? 'bg-orange-100 text-orange-700'
+                          : 'bg-gray-100 text-gray-500'
+                      }`}
                   >
                     {i + 1}
                   </div>
@@ -546,13 +559,12 @@ export default function AdminDashboard() {
                     </td>
                     <td className="py-2.5">
                       <span
-                        className={`text-xs font-bold px-2 py-0.5 rounded-full ${
-                          report.severity_score >= 8
-                            ? 'bg-red-100 text-red-700'
-                            : report.severity_score >= 5
+                        className={`text-xs font-bold px-2 py-0.5 rounded-full ${report.severity_score >= 8
+                          ? 'bg-red-100 text-red-700'
+                          : report.severity_score >= 5
                             ? 'bg-amber-100 text-amber-700'
                             : 'bg-green-100 text-green-700'
-                        }`}
+                          }`}
                       >
                         {report.severity_score}/10
                       </span>
@@ -662,8 +674,8 @@ function getFallbackDashboard(): FullDashboard {
       risk_level: ([3, 7, 15, 22].includes(i + 1)
         ? 'high'
         : (i + 1) % 3 === 0
-        ? 'medium'
-        : 'low') as 'high' | 'medium' | 'low',
+          ? 'medium'
+          : 'low') as 'high' | 'medium' | 'low',
     })),
     trends: Array.from({ length: 7 }, (_, d) => {
       const date = new Date(2026, 1, 22 + d);

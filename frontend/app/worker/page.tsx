@@ -50,6 +50,9 @@ export default function WorkerDashboard() {
   const [workerNotes, setWorkerNotes] = useState('');
   const [validationResult, setValidationResult] = useState<Record<string, unknown> | null>(null);
   const [showMap, setShowMap] = useState(false);
+  const [isValidating, setIsValidating] = useState(false);
+  const [bypassMode, setBypassMode] = useState(false);
+  const [bypassReason, setBypassReason] = useState('');
   const fileRef = useRef<HTMLInputElement>(null);
 
   const S3_BASE = 'https://sanitisense-media-982253889131.s3.us-east-1.amazonaws.com';
@@ -77,14 +80,34 @@ export default function WorkerDashboard() {
     setUpdating(true);
     setValidationResult(null);
     try {
+      if (newStatus === 'completed' && bypassMode) {
+        // Camera bypass — mark completed, flag for admin review
+        const reason = bypassReason.trim() || 'Camera unavailable';
+        await updateTask(taskId, {
+          status: 'completed',
+          notes: `BYPASS: ${reason}`,
+        });
+        setSelectedTask(null);
+        setWorkerNotes('');
+        setAfterPhoto('');
+        setAfterPhotoFile(null);
+        setValidationResult(null);
+        setBypassMode(false);
+        setBypassReason('');
+        setTasks([]);
+        setFilterStatus('completed');
+        return;
+      }
+
       if (newStatus === 'completed' && afterPhotoFile && selectedTask?.image_key) {
         // Step 1: Upload after-photo to S3
         const afterKey = await uploadImageToS3(afterPhotoFile, 'worker');
 
-        // Step 2: Update task with after_image_key
-        await updateTask(taskId, { status: 'completed', notes: workerNotes, worker_id: workerId });
+        // Step 2: Update task with completed status
+        await updateTask(taskId, { status: 'completed', notes: workerNotes });
 
         // Step 3: Call validation endpoint (before/after AI comparison)
+        setIsValidating(true);
         try {
           const validation = await validateCompletion({
             task_id: taskId,
@@ -98,6 +121,8 @@ export default function WorkerDashboard() {
         } catch {
           // Validation call failed but task is still marked complete
           console.warn('Validation API call failed, task still marked complete');
+        } finally {
+          setIsValidating(false);
         }
       } else {
         // Simple status update (start task, etc.)
@@ -110,6 +135,8 @@ export default function WorkerDashboard() {
       setAfterPhoto('');
       setAfterPhotoFile(null);
       setValidationResult(null);
+      setBypassMode(false);
+      setBypassReason('');
       setTasks([]);  // Clear stale list so user sees loading spinner
       setFilterStatus(newStatus);
     } catch {
@@ -130,6 +157,9 @@ export default function WorkerDashboard() {
       const reader = new FileReader();
       reader.onload = (ev) => setAfterPhoto(ev.target?.result as string);
       reader.readAsDataURL(file);
+      // Automatically exit bypass mode if user uploads a photo
+      setBypassMode(false);
+      setBypassReason('');
     }
   };
 
@@ -172,26 +202,24 @@ export default function WorkerDashboard() {
         <div className="flex items-center justify-between mb-4">
           <div className="flex gap-2 overflow-x-auto pb-2 flex-1">
             {['pending', 'assigned', 'in_progress', 'completed'].map((status) => (
-            <button
-              key={status}
-              onClick={() => setFilterStatus(status)}
-              className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-colors ${
-                filterStatus === status
+              <button
+                key={status}
+                onClick={() => setFilterStatus(status)}
+                className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-colors ${filterStatus === status
                   ? 'bg-emerald-600 text-white'
                   : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'
-              }`}
-            >
-              {status.replace('_', ' ').replace(/\b\w/g, (c) => c.toUpperCase())}
-            </button>
-          ))}
+                  }`}
+              >
+                {status.replace('_', ' ').replace(/\b\w/g, (c) => c.toUpperCase())}
+              </button>
+            ))}
           </div>
           <button
             onClick={() => setShowMap(!showMap)}
-            className={`ml-2 px-3 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-colors flex items-center gap-1.5 ${
-              showMap
-                ? 'bg-emerald-600 text-white'
-                : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'
-            }`}
+            className={`ml-2 px-3 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-colors flex items-center gap-1.5 ${showMap
+              ? 'bg-emerald-600 text-white'
+              : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'
+              }`}
           >
             {showMap ? <ClipboardList className="h-4 w-4" /> : <Navigation className="h-4 w-4" />}
             {showMap ? 'List' : 'Map'}
@@ -384,12 +412,13 @@ export default function WorkerDashboard() {
                 <p className="text-gray-700">{selectedTask.description}</p>
               </div>
 
-              {/* After photo upload (for completing) */}
+              {/* After photo upload + bypass (for completing) */}
               {selectedTask.status !== 'completed' && selectedTask.status !== 'verified' && (
                 <>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Upload Completion Photo
+                      Completion Photo
+                      <span className="ml-1 text-red-500">*</span>
                     </label>
                     {afterPhoto ? (
                       <div className="relative">
@@ -399,7 +428,7 @@ export default function WorkerDashboard() {
                           className="w-full h-40 object-cover rounded-lg"
                         />
                         <button
-                          onClick={() => setAfterPhoto('')}
+                          onClick={() => { setAfterPhoto(''); setAfterPhotoFile(null); }}
                           className="absolute top-2 right-2 bg-white/80 rounded-full p-1"
                         >
                           <X className="h-4 w-4" />
@@ -408,10 +437,15 @@ export default function WorkerDashboard() {
                     ) : (
                       <button
                         onClick={() => fileRef.current?.click()}
-                        className="w-full border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-emerald-400 transition"
+                        disabled={bypassMode}
+                        className={`w-full border-2 border-dashed rounded-lg p-6 text-center transition ${bypassMode
+                            ? 'border-gray-200 opacity-40 cursor-not-allowed'
+                            : 'border-gray-300 hover:border-emerald-400'
+                          }`}
                       >
                         <Camera className="h-8 w-8 text-gray-400 mx-auto mb-2" />
                         <p className="text-sm text-gray-500">Take or upload after photo</p>
+                        <p className="text-xs text-gray-400 mt-1">Required to mark task complete</p>
                       </button>
                     )}
                     <input
@@ -422,6 +456,38 @@ export default function WorkerDashboard() {
                       className="hidden"
                       onChange={handlePhotoUpload}
                     />
+
+                    {/* Camera bypass toggle */}
+                    {!afterPhotoFile && !bypassMode && (
+                      <button
+                        onClick={() => setBypassMode(true)}
+                        className="mt-2 text-xs text-gray-400 hover:text-amber-600 underline"
+                      >
+                        📷 Camera not working?
+                      </button>
+                    )}
+
+                    {/* Bypass reason form */}
+                    {bypassMode && (
+                      <div className="mt-3 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                        <p className="text-xs font-medium text-amber-800 mb-2">
+                          🚩 Bypass mode — task will be flagged for admin review
+                        </p>
+                        <textarea
+                          value={bypassReason}
+                          onChange={(e) => setBypassReason(e.target.value)}
+                          placeholder="Briefly explain why a photo couldn't be taken..."
+                          className="w-full border border-amber-300 rounded-lg p-2 text-xs focus:ring-2 focus:ring-amber-400 outline-none resize-none"
+                          rows={2}
+                        />
+                        <button
+                          onClick={() => { setBypassMode(false); setBypassReason(''); }}
+                          className="text-xs text-gray-400 hover:text-gray-600 underline mt-1"
+                        >
+                          Cancel bypass
+                        </button>
+                      </div>
+                    )}
                   </div>
 
                   <div>
@@ -444,7 +510,7 @@ export default function WorkerDashboard() {
                 {selectedTask.status === 'pending' && (
                   <button
                     onClick={() => handleStatusUpdate(selectedTask.task_id, 'in_progress')}
-                    disabled={updating}
+                    disabled={updating || isValidating}
                     className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl bg-blue-600 text-white font-semibold hover:bg-blue-700 disabled:opacity-50"
                   >
                     {updating ? <Loader2 className="h-5 w-5 animate-spin" /> : null}
@@ -454,7 +520,7 @@ export default function WorkerDashboard() {
                 {selectedTask.status === 'assigned' && (
                   <button
                     onClick={() => handleStatusUpdate(selectedTask.task_id, 'in_progress')}
-                    disabled={updating}
+                    disabled={updating || isValidating}
                     className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl bg-blue-600 text-white font-semibold hover:bg-blue-700 disabled:opacity-50"
                   >
                     {updating ? <Loader2 className="h-5 w-5 animate-spin" /> : null}
@@ -462,23 +528,42 @@ export default function WorkerDashboard() {
                   </button>
                 )}
                 {selectedTask.status === 'in_progress' && (
-                  <button
-                    onClick={() => handleStatusUpdate(selectedTask.task_id, 'completed')}
-                    disabled={updating}
-                    className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl bg-emerald-600 text-white font-semibold hover:bg-emerald-700 disabled:opacity-50"
-                  >
-                    {updating ? (
+                  isValidating ? (
+                    <div className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl bg-purple-50 text-purple-700 font-semibold border border-purple-200">
                       <Loader2 className="h-5 w-5 animate-spin" />
-                    ) : (
-                      <CheckCircle className="h-5 w-5" />
-                    )}
-                    Mark Complete
-                  </button>
+                      AI is reviewing…
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => handleStatusUpdate(selectedTask.task_id, 'completed')}
+                      disabled={updating || (!afterPhotoFile && !bypassMode)}
+                      title={!afterPhotoFile && !bypassMode ? 'Upload a completion photo first' : undefined}
+                      className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl bg-emerald-600 text-white font-semibold hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      {updating ? (
+                        <Loader2 className="h-5 w-5 animate-spin" />
+                      ) : (
+                        <CheckCircle className="h-5 w-5" />
+                      )}
+                      {bypassMode ? 'Submit (Bypass)' : 'Mark Complete'}
+                    </button>
+                  )
                 )}
                 {selectedTask.status === 'completed' && (
-                  <div className="flex-1 text-center py-3 bg-emerald-50 text-emerald-700 rounded-xl font-medium">
+                  <div className="flex-1 text-center py-3 bg-amber-50 text-amber-700 rounded-xl font-medium border border-amber-200">
+                    <Loader2 className="h-5 w-5 inline mr-2 animate-spin" />
+                    Awaiting AI Verification
+                  </div>
+                )}
+                {selectedTask.status === 'verified' && (
+                  <div className="flex-1 text-center py-3 bg-emerald-50 text-emerald-700 rounded-xl font-medium border border-emerald-200">
                     <CheckCircle className="h-5 w-5 inline mr-2" />
-                    Task Completed — Awaiting AI Verification
+                    ✅ Verified by AI
+                  </div>
+                )}
+                {selectedTask.status === 'rejected' && (
+                  <div className="flex-1 text-center py-3 bg-red-50 text-red-700 rounded-xl font-medium border border-red-200">
+                    ❌ Rejected — Needs Redo
                   </div>
                 )}
               </div>

@@ -93,11 +93,11 @@ export default function LandingPage() {
                 <ArrowRight className="h-5 w-5" />
               </Link>
               <Link
-                href="/dashboard"
+                href="/login"
                 className="inline-flex items-center justify-center gap-2 bg-emerald-800/50 backdrop-blur text-white font-semibold px-8 py-3.5 rounded-xl hover:bg-emerald-800/70 transition-colors border border-white/20"
               >
-                View Dashboard
-                <BarChart3 className="h-5 w-5" />
+                Sign In
+                <ArrowRight className="h-5 w-5" />
               </Link>
             </div>
           </div>

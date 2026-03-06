@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Camera, HardHat, BarChart3, Shield, ArrowRight, User, Lock } from 'lucide-react';
+import { Camera, HardHat, BarChart3, Shield, ArrowRight, User, Lock, Loader2 } from 'lucide-react';
 
 export type UserRole = 'citizen' | 'worker' | 'admin';
 
@@ -57,9 +57,12 @@ export default function LoginPage() {
   const [showWorkerInput, setShowWorkerInput] = useState(false);
   const [showAdminInput, setShowAdminInput] = useState(false);
   const [adminPass, setAdminPass] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
 
   const handleRoleSelect = (option: RoleOption) => {
     setSelectedRole(option.role);
+    setError('');
 
     if (option.role === 'worker') {
       setShowWorkerInput(true);
@@ -73,25 +76,53 @@ export default function LoginPage() {
       return;
     }
 
-    // Citizen — save role and redirect immediately
-    localStorage.setItem('sanitisense_role', option.role);
-    localStorage.removeItem('sanitisense_worker_id');
-    router.push(option.redirect);
+    // Citizen — call API route to set cookie, then redirect
+    handleLogin('citizen');
+  };
+
+  /**
+   * POSTs to /api/auth/login which sets HttpOnly session cookie server-side.
+   * The middleware.ts on Edge will read this cookie for route protection.
+   */
+  const handleLogin = async (role: UserRole, opts?: { workerId?: string; password?: string }) => {
+    setLoading(true);
+    setError('');
+    try {
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ role, workerId: opts?.workerId, password: opts?.password }),
+      });
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setError(data.error || 'Login failed. Please try again.');
+        return;
+      }
+
+      // Store worker_id in localStorage for client-side display (non-sensitive)
+      if (role === 'worker' && opts?.workerId) {
+        localStorage.setItem('sanitisense_worker_id', opts.workerId.trim());
+      }
+
+      // Find redirect target for this role
+      const option = roles.find((r) => r.role === role);
+      router.push(option?.redirect ?? '/');
+    } catch {
+      setError('Network error. Please try again.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleAdminLogin = () => {
-    // Demo: accept any non-empty password
     if (!adminPass.trim()) return;
-    localStorage.setItem('sanitisense_role', 'admin');
-    localStorage.removeItem('sanitisense_worker_id');
-    router.push('/dashboard');
+    handleLogin('admin', { password: adminPass });
   };
 
   const handleWorkerLogin = () => {
     if (!workerId.trim()) return;
-    localStorage.setItem('sanitisense_role', 'worker');
-    localStorage.setItem('sanitisense_worker_id', workerId.trim());
-    router.push('/worker');
+    handleLogin('worker', { workerId: workerId.trim() });
   };
 
   return (
@@ -124,9 +155,9 @@ export default function LoginPage() {
                   <button
                     key={option.role}
                     onClick={() => handleRoleSelect(option)}
-                    className={`group relative text-left p-6 rounded-2xl border-2 transition-all duration-200 ${option.bgColor} ${option.borderColor} ${
-                      selectedRole === option.role ? 'ring-2 ring-offset-2 ring-emerald-500' : ''
-                    }`}
+                    disabled={loading}
+                    className={`group relative text-left p-6 rounded-2xl border-2 transition-all duration-200 ${option.bgColor} ${option.borderColor} ${selectedRole === option.role ? 'ring-2 ring-offset-2 ring-emerald-500' : ''
+                      } disabled:opacity-60`}
                   >
                     <div
                       className={`w-14 h-14 rounded-xl flex items-center justify-center mb-4 bg-white shadow-sm`}
@@ -148,7 +179,7 @@ export default function LoginPage() {
             /* Worker ID input */
             <div className="max-w-md mx-auto">
               <button
-                onClick={() => setShowWorkerInput(false)}
+                onClick={() => { setShowWorkerInput(false); setError(''); }}
                 className="text-sm text-gray-500 hover:text-gray-700 mb-4 flex items-center gap-1"
               >
                 &larr; Back to role selection
@@ -178,18 +209,19 @@ export default function LoginPage() {
                         onKeyDown={(e) => e.key === 'Enter' && handleWorkerLogin()}
                       />
                     </div>
-                    <p className="text-xs text-gray-400 mt-1">
-                      Demo IDs: W-001 through W-005
-                    </p>
+                    <p className="text-xs text-gray-400 mt-1">Demo IDs: W-001 through W-005</p>
                   </div>
+
+                  {error && <p className="text-sm text-red-600">{error}</p>}
 
                   <button
                     onClick={handleWorkerLogin}
-                    disabled={!workerId.trim()}
+                    disabled={!workerId.trim() || loading}
                     className="w-full flex items-center justify-center gap-2 py-3 bg-amber-500 text-white font-semibold rounded-xl hover:bg-amber-600 transition disabled:opacity-50"
                   >
+                    {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
                     Enter Dashboard
-                    <ArrowRight className="h-4 w-4" />
+                    {!loading && <ArrowRight className="h-4 w-4" />}
                   </button>
                 </div>
               </div>
@@ -198,7 +230,7 @@ export default function LoginPage() {
             /* Admin login */
             <div className="max-w-md mx-auto">
               <button
-                onClick={() => setShowAdminInput(false)}
+                onClick={() => { setShowAdminInput(false); setError(''); }}
                 className="text-sm text-gray-500 hover:text-gray-700 mb-4 flex items-center gap-1"
               >
                 &larr; Back to role selection
@@ -242,18 +274,19 @@ export default function LoginPage() {
                         onKeyDown={(e) => e.key === 'Enter' && handleAdminLogin()}
                       />
                     </div>
-                    <p className="text-xs text-gray-400 mt-1">
-                      Demo: use any password
-                    </p>
+                    <p className="text-xs text-gray-400 mt-1">Demo: use any password</p>
                   </div>
+
+                  {error && <p className="text-sm text-red-600">{error}</p>}
 
                   <button
                     onClick={handleAdminLogin}
-                    disabled={!adminPass.trim()}
+                    disabled={!adminPass.trim() || loading}
                     className="w-full flex items-center justify-center gap-2 py-3 bg-emerald-600 text-white font-semibold rounded-xl hover:bg-emerald-700 transition disabled:opacity-50"
                   >
+                    {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
                     Access Dashboard
-                    <ArrowRight className="h-4 w-4" />
+                    {!loading && <ArrowRight className="h-4 w-4" />}
                   </button>
                 </div>
               </div>

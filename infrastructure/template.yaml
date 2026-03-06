@@ -90,6 +90,13 @@ Resources:
             - Effect: Allow
               Action:
                 - bedrock:InvokeModel
+              Resource:
+                # Base foundation model
+                - !Sub 'arn:aws:bedrock:${AWS::Region}::foundation-model/anthropic.claude-sonnet-4-20250514-v1:0'
+                # Cross-region inference profile (required for 'us.' prefix in model ID)
+                - !Sub 'arn:aws:bedrock:${AWS::Region}:${AWS::AccountId}:inference-profile/us.anthropic.claude-sonnet-4-20250514-v1:0'
+            - Effect: Allow
+              Action:
                 - rekognition:DetectLabels
               Resource: '*'
 
@@ -117,6 +124,11 @@ Resources:
             - Effect: Allow
               Action:
                 - bedrock:InvokeModel
+              Resource:
+                - !Sub 'arn:aws:bedrock:${AWS::Region}::foundation-model/anthropic.claude-sonnet-4-20250514-v1:0'
+                - !Sub 'arn:aws:bedrock:${AWS::Region}:${AWS::AccountId}:inference-profile/us.anthropic.claude-sonnet-4-20250514-v1:0'
+            - Effect: Allow
+              Action:
                 - rekognition:DetectLabels
               Resource: '*'
 
@@ -197,7 +209,9 @@ Resources:
             - Effect: Allow
               Action:
                 - bedrock:InvokeModel
-              Resource: '*'
+              Resource:
+                - !Sub 'arn:aws:bedrock:${AWS::Region}::foundation-model/anthropic.claude-sonnet-4-20250514-v1:0'
+                - !Sub 'arn:aws:bedrock:${AWS::Region}:${AWS::AccountId}:inference-profile/us.anthropic.claude-sonnet-4-20250514-v1:0'
 
   # ── Lambda: epidemic_advisor — AI health risk advisory ─────────────────────
   EpidemicAdvisorFunction:
@@ -226,9 +240,14 @@ Resources:
             - Effect: Allow
               Action:
                 - bedrock:InvokeModel
+              Resource:
+                - !Sub 'arn:aws:bedrock:${AWS::Region}::foundation-model/anthropic.claude-sonnet-4-20250514-v1:0'
+                - !Sub 'arn:aws:bedrock:${AWS::Region}:${AWS::AccountId}:inference-profile/us.anthropic.claude-sonnet-4-20250514-v1:0'
+            - Effect: Allow
+              Action:
                 - bedrock:RetrieveAndGenerate
                 - bedrock:Retrieve
-              Resource: '*'
+              Resource: '*'   # Scope to specific KB ARN once created in Bedrock console
 
   # ── Lambda: dashboard_api — stats + heatmap + ward reports ────────────────
   DashboardApiFunction:
