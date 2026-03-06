@@ -14,6 +14,8 @@ import {
   Shield,
   Mic,
   FileText,
+  Copy,
+  ClipboardCheck,
 } from 'lucide-react';
 import { submitReport, uploadImageToS3, uploadAudioToS3, CATEGORY_LABELS } from '@/lib/api';
 import VoiceRecorder from '@/app/components/VoiceRecorder';
@@ -51,6 +53,7 @@ export default function ReportPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
   const [voiceTranscript, setVoiceTranscript] = useState('');
+  const [copied, setCopied] = useState(false);
 
   // Handle image selection
   const handleImageSelect = useCallback((file: File) => {
@@ -137,6 +140,12 @@ export default function ReportPage() {
       });
       setResult(res);
       setStep('result');
+      // Save ticket to localStorage so citizen can track it later
+      if (res.ticket_id) {
+        const existing = JSON.parse(localStorage.getItem('sanitisense_tickets') || '[]');
+        existing.unshift({ ticket_id: res.ticket_id, submitted_at: new Date().toISOString(), status: 'pending' });
+        localStorage.setItem('sanitisense_tickets', JSON.stringify(existing.slice(0, 20)));
+      }
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Failed to submit report';
       setError(message);
@@ -503,9 +512,22 @@ export default function ReportPage() {
             {/* Ticket ID */}
             <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 text-center mb-6">
               <div className="text-sm text-emerald-600 mb-1">Your Ticket ID</div>
-              <div className="text-2xl font-bold text-emerald-700 font-mono">
-                {result.ticket_id}
+              <div className="flex items-center justify-center gap-2 mt-1">
+                <span className="text-2xl font-bold text-emerald-700 font-mono">{result.ticket_id}</span>
+                <button
+                  onClick={() => {
+                    navigator.clipboard.writeText(result.ticket_id);
+                    setCopied(true);
+                    setTimeout(() => setCopied(false), 2000);
+                  }}
+                  className="p-1.5 rounded-lg hover:bg-emerald-100 transition-colors text-emerald-600"
+                  title="Copy ticket ID"
+                >
+                  {copied ? <ClipboardCheck className="h-5 w-5 text-emerald-700" /> : <Copy className="h-5 w-5" />}
+                </button>
               </div>
+              {copied && <p className="text-xs text-emerald-600 mt-1">Copied!</p>}
+              <p className="text-xs text-gray-400 mt-2">Save this ID to track your complaint</p>
             </div>
 
             {/* AI Analysis */}
