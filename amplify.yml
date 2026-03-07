@@ -16,6 +16,3 @@ frontend:
     paths:
       - frontend/node_modules/**/*
       - frontend/.next/cache/**/*
-  framework:
-    name: Next.js
-    version: 16
