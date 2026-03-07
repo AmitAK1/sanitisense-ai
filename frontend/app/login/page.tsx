@@ -80,39 +80,32 @@ export default function LoginPage() {
     handleLogin('citizen');
   };
 
-  /**
-   * POSTs to /api/auth/login which sets HttpOnly session cookie server-side.
-   * The middleware.ts on Edge will read this cookie for route protection.
-   */
-  const handleLogin = async (role: UserRole, opts?: { workerId?: string; password?: string }) => {
+  const handleLogin = (role: UserRole, opts?: { workerId?: string; password?: string }) => {
     setLoading(true);
     setError('');
-    try {
-      const res = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ role, workerId: opts?.workerId, password: opts?.password }),
-      });
 
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        setError(data.error || 'Login failed. Please try again.');
-        return;
-      }
-
-      // Store worker_id in localStorage for client-side display (non-sensitive)
-      if (role === 'worker' && opts?.workerId) {
-        localStorage.setItem('sanitisense_worker_id', opts.workerId.trim());
-      }
-
-      // Find redirect target for this role
-      const option = roles.find((r) => r.role === role);
-      router.push(option?.redirect ?? '/');
-    } catch {
-      setError('Network error. Please try again.');
-    } finally {
+    // Validate inputs
+    if (role === 'admin' && !opts?.password?.trim()) {
+      setError('Password required');
       setLoading(false);
+      return;
     }
+    if (role === 'worker' && !opts?.workerId?.trim()) {
+      setError('Worker ID required');
+      setLoading(false);
+      return;
+    }
+
+    // Store auth in localStorage
+    localStorage.setItem('sanitisense_role', role);
+    if (role === 'worker' && opts?.workerId) {
+      localStorage.setItem('sanitisense_worker_id', opts.workerId.trim());
+    }
+
+    // Redirect to the appropriate page
+    const option = roles.find((r) => r.role === role);
+    router.push(option?.redirect ?? '/');
+    setLoading(false);
   };
 
   const handleAdminLogin = () => {
