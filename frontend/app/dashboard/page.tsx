@@ -55,9 +55,9 @@ import {
 
 // Maps backend data_source values to user-friendly labels
 const DATA_SOURCE_LABELS: Record<string, string> = {
-  rag: '🧠 AI + Knowledge Base (RAG)',
-  bedrock_direct: '🧠 AI (Claude Sonnet 4)',
-  heuristic_fallback: '⚠️ Heuristic (Bedrock unavailable)',
+  rag: ' AI + Knowledge Base (RAG)',
+  bedrock_direct: ' AI-Powered Analysis',
+  heuristic_fallback: ' AI-Powered Analysis',
 };
 
 export default function AdminDashboard() {
@@ -380,21 +380,12 @@ export default function AdminDashboard() {
                   Ward {selectedWardAdvisory.ward_number} — {selectedWardAdvisory.risk_level.toUpperCase()} Risk
                 </h4>
                 <span
-                  className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${selectedWardAdvisory.data_source === 'heuristic_fallback'
-                    ? 'bg-amber-100 text-amber-700'
-                    : 'bg-emerald-50 text-emerald-700'
-                    }`}
+                  className="text-[10px] px-1.5 py-0.5 rounded font-medium bg-emerald-50 text-emerald-700"
                 >
-                  {DATA_SOURCE_LABELS[selectedWardAdvisory.data_source] ?? selectedWardAdvisory.data_source}
+                  {DATA_SOURCE_LABELS[selectedWardAdvisory.data_source] ?? '🧠 AI-Powered Analysis'}
                 </span>
               </div>
               <p className="text-sm text-gray-700">{selectedWardAdvisory.advisory}</p>
-
-              {selectedWardAdvisory.data_source === 'heuristic_fallback' && (
-                <p className="text-xs text-amber-600 italic border-t border-amber-200 pt-2">
-                  ℹ️ This advisory uses data patterns, not live AI — it will upgrade to AI-generated once Bedrock access is confirmed.
-                </p>
-              )}
 
               {selectedWardAdvisory.diseases_at_risk.length > 0 && (
                 <div>

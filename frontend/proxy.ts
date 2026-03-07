@@ -1,5 +1,5 @@
 /**
- * Next.js Edge Middleware — Route Protection
+ * Next.js Edge Proxy — Route Protection
  *
  * Runs on the server/Edge BEFORE the page renders, so there is zero client-side
  * flash of protected content. Reads the HttpOnly `sanitisense_role` cookie set
@@ -9,7 +9,7 @@
  *   /dashboard  → requires role = "admin"
  *   /worker     → requires role = "worker"
  *
- * Unprotected routes handled by middleware (allowed through):
+ * Unprotected routes (allowed through):
  *   /           homepage
  *   /login      login page
  *   /report     citizen report (no auth required)

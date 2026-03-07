@@ -52,6 +52,7 @@ export default function ReportPage() {
   } | null>(null);
   const [error, setError] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
   const [voiceTranscript, setVoiceTranscript] = useState('');
   const [copied, setCopied] = useState(false);
@@ -249,45 +250,64 @@ export default function ReportPage() {
               Upload Photo
             </h2>
 
-            <div
-              className="border-2 border-dashed border-gray-300 rounded-xl p-8 text-center hover:border-emerald-400 transition-colors cursor-pointer"
-              onDragOver={(e) => e.preventDefault()}
-              onDrop={handleDrop}
-              onClick={() => fileInputRef.current?.click()}
-            >
-              {imagePreview ? (
-                <div className="relative">
-                  <img
-                    src={imagePreview}
-                    alt="Preview"
-                    className="max-h-64 mx-auto rounded-lg"
-                  />
+            {/* Image preview (shown after selection) */}
+            {imagePreview ? (
+              <div className="relative rounded-xl overflow-hidden border border-gray-200">
+                <img
+                  src={imagePreview}
+                  alt="Preview"
+                  className="max-h-64 w-full object-contain bg-gray-50"
+                />
+                <button
+                  className="absolute top-2 right-2 bg-white/90 rounded-full p-1 shadow hover:bg-white transition-colors"
+                  onClick={() => {
+                    setImageFile(null);
+                    setImagePreview('');
+                  }}
+                >
+                  <X className="h-4 w-4 text-gray-600" />
+                </button>
+              </div>
+            ) : (
+              <>
+                {/* Two primary action buttons */}
+                <div className="grid grid-cols-2 gap-3">
+                  {/* Open Camera */}
                   <button
-                    className="absolute top-2 right-2 bg-white/80 rounded-full p-1"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setImageFile(null);
-                      setImagePreview('');
-                    }}
+                    onClick={() => cameraInputRef.current?.click()}
+                    className="flex flex-col items-center justify-center gap-2 bg-emerald-600 text-white font-semibold py-5 rounded-xl hover:bg-emerald-700 active:scale-95 transition-all"
                   >
-                    <X className="h-4 w-4" />
+                    <Camera className="h-7 w-7" />
+                    <span className="text-sm">Open Camera</span>
+                  </button>
+
+                  {/* Upload from Device */}
+                  <button
+                    onClick={() => fileInputRef.current?.click()}
+                    className="flex flex-col items-center justify-center gap-2 bg-white text-emerald-700 font-semibold py-5 rounded-xl border-2 border-emerald-600 hover:bg-emerald-50 active:scale-95 transition-all"
+                  >
+                    <Upload className="h-7 w-7" />
+                    <span className="text-sm">Upload / Gallery</span>
                   </button>
                 </div>
-              ) : (
-                <>
-                  <div className="w-16 h-16 bg-emerald-50 rounded-2xl flex items-center justify-center mx-auto mb-4">
-                    <ImageIcon className="h-8 w-8 text-emerald-500" />
-                  </div>
-                  <p className="text-gray-700 font-medium mb-1">
-                    Drag & drop or click to upload
-                  </p>
-                  <p className="text-sm text-gray-500">JPG, PNG, HEIC — Max 10MB</p>
-                </>
-              )}
-            </div>
 
+                {/* Drag & drop zone — desktop */}
+                <div
+                  className="mt-3 border-2 border-dashed border-gray-200 rounded-xl py-5 text-center hover:border-emerald-400 transition-colors cursor-pointer"
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={handleDrop}
+                  onClick={() => fileInputRef.current?.click()}
+                >
+                  <ImageIcon className="h-6 w-6 text-gray-400 mx-auto mb-1" />
+                  <p className="text-sm text-gray-500">or drag & drop here</p>
+                  <p className="text-xs text-gray-400 mt-0.5">JPG, PNG, HEIC — Max 10MB</p>
+                </div>
+              </>
+            )}
+
+            {/* Hidden input — camera only (capture="environment") */}
             <input
-              ref={fileInputRef}
+              ref={cameraInputRef}
               type="file"
               accept="image/*"
               capture="environment"
@@ -295,17 +315,22 @@ export default function ReportPage() {
               onChange={(e) => {
                 const file = e.target.files?.[0];
                 if (file) handleImageSelect(file);
+                e.target.value = '';
               }}
             />
 
-            {/* Camera button for mobile */}
-            <button
-              onClick={() => fileInputRef.current?.click()}
-              className="mt-4 w-full flex items-center justify-center gap-2 bg-emerald-600 text-white font-semibold py-3 rounded-xl hover:bg-emerald-700 transition-colors"
-            >
-              <Camera className="h-5 w-5" />
-              Take Photo or Choose from Gallery
-            </button>
+            {/* Hidden input — file picker / gallery (no capture) */}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) handleImageSelect(file);
+                e.target.value = '';
+              }}
+            />
           </div>
         )}
 
