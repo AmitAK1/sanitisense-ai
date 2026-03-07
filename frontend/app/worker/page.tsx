@@ -201,18 +201,22 @@ export default function WorkerDashboard() {
         {/* View toggle: List | Map */}
         <div className="flex items-center justify-between mb-4">
           <div className="flex gap-2 overflow-x-auto pb-2 flex-1">
-            {['pending', 'assigned', 'in_progress', 'completed'].map((status) => (
-              <button
-                key={status}
-                onClick={() => setFilterStatus(status)}
-                className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-colors ${filterStatus === status
-                  ? 'bg-emerald-600 text-white'
-                  : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'
-                  }`}
-              >
-                {status.replace('_', ' ').replace(/\b\w/g, (c) => c.toUpperCase())}
-              </button>
-            ))}
+            {['pending', 'assigned', 'in_progress', 'completed'].map((status) => {
+              const label = status === 'completed' ? 'Completed / Verified'
+                : status.replace('_', ' ').replace(/\b\w/g, (c: string) => c.toUpperCase());
+              return (
+                <button
+                  key={status}
+                  onClick={() => setFilterStatus(status)}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-colors ${filterStatus === status
+                    ? 'bg-emerald-600 text-white'
+                    : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'
+                    }`}
+                >
+                  {label}
+                </button>
+              );
+            })}
           </div>
           <button
             onClick={() => setShowMap(!showMap)}

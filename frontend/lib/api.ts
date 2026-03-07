@@ -158,6 +158,16 @@ export const submitReport = (data: ReportSubmission) =>
 
 // Tasks — backend wraps response in {tasks: [...], count: N}
 export const fetchTasks = async (status = 'pending'): Promise<Task[]> => {
+  // "completed" tab shows both completed (awaiting verification) and verified tasks
+  if (status === 'completed') {
+    const [completed, verified] = await Promise.all([
+      apiFetch<{ tasks: Record<string, unknown>[]; count: number }>('/tasks?status=completed'),
+      apiFetch<{ tasks: Record<string, unknown>[]; count: number }>('/tasks?status=verified'),
+    ]);
+    return [...(completed.tasks || []), ...(verified.tasks || [])]
+      .filter((t) => t.task_id || t.report_id)
+      .map(normalizeTask);
+  }
   const res = await apiFetch<{ tasks: Record<string, unknown>[]; count: number }>(`/tasks?status=${status}`);
   return (res.tasks || [])
     .filter((t) => t.task_id || t.report_id)   // skip phantom records with no IDs
