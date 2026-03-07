@@ -1,5 +1,5 @@
 /**
- * Next.js Edge Proxy — Route Protection
+ * Next.js Edge Proxy — Route Protection (Next.js 16+ convention)
  *
  * Runs on the server/Edge BEFORE the page renders, so there is zero client-side
  * flash of protected content. Reads the HttpOnly `sanitisense_role` cookie set
@@ -18,7 +18,7 @@
  */
 import { NextResponse, type NextRequest } from 'next/server';
 
-export function middleware(request: NextRequest) {
+export function proxy(request: NextRequest) {
     const role = request.cookies.get('sanitisense_role')?.value;
     const { pathname } = request.nextUrl;
 
