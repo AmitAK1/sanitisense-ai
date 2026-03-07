@@ -56,6 +56,7 @@ export default function ReportPage() {
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
   const [voiceTranscript, setVoiceTranscript] = useState('');
   const [copied, setCopied] = useState(false);
+  const [isSpamRejected, setIsSpamRejected] = useState(false);
 
   // Handle image selection
   const handleImageSelect = useCallback((file: File) => {
@@ -150,7 +151,16 @@ export default function ReportPage() {
       }
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Failed to submit report';
-      setError(message);
+      // Spam / not-a-sanitation-issue rejection from the AI
+      if (
+        message.toLowerCase().includes('does not appear to show') ||
+        message.toLowerCase().includes('not a sanitation') ||
+        message.toLowerCase().includes('not appear to show')
+      ) {
+        setIsSpamRejected(true);
+      } else {
+        setError(message);
+      }
     } finally {
       setLoading(false);
     }
@@ -167,6 +177,7 @@ export default function ReportPage() {
     setError('');
     setAudioBlob(null);
     setVoiceTranscript('');
+    setIsSpamRejected(false);
   };
 
   // Severity badge
@@ -432,8 +443,79 @@ export default function ReportPage() {
           </div>
         )}
 
+        {/* ==================== SPAM REJECTION ==================== */}
+        {isSpamRejected && (
+          <div className="bg-white rounded-2xl shadow-sm border border-amber-200 overflow-hidden">
+            {/* Amber header strip */}
+            <div className="bg-amber-50 border-b border-amber-200 px-6 py-4 flex items-center gap-3">
+              <div className="w-10 h-10 bg-amber-100 rounded-full flex items-center justify-center flex-shrink-0">
+                <AlertTriangle className="h-5 w-5 text-amber-600" />
+              </div>
+              <div>
+                <h2 className="font-bold text-gray-900 text-base">Not a Sanitation Issue</h2>
+                <p className="text-amber-700 text-xs mt-0.5">Our AI couldn&apos;t detect a sanitation problem in this photo</p>
+              </div>
+            </div>
+
+            <div className="p-6">
+              {/* Photo thumbnail */}
+              {imagePreview && (
+                <div className="relative mb-5 rounded-xl overflow-hidden border border-amber-200">
+                  <img
+                    src={imagePreview}
+                    alt="Rejected upload"
+                    className="w-full h-36 object-cover opacity-60"
+                  />
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <div className="bg-amber-500/90 text-white text-xs font-bold px-3 py-1.5 rounded-full flex items-center gap-1.5">
+                      <X className="h-3.5 w-3.5" />
+                      AI: Not a sanitation photo
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Tips */}
+              <div className="bg-gray-50 rounded-xl p-4 mb-5">
+                <p className="text-xs font-semibold text-gray-600 uppercase tracking-wider mb-2">What to photograph instead</p>
+                <ul className="space-y-1.5 text-sm text-gray-600">
+                  <li className="flex items-center gap-2"><span className="text-emerald-500 font-bold">✓</span> Garbage pile or overflowing bin</li>
+                  <li className="flex items-center gap-2"><span className="text-emerald-500 font-bold">✓</span> Clogged or open drain / sewer</li>
+                  <li className="flex items-center gap-2"><span className="text-emerald-500 font-bold">✓</span> Stagnant or flooded water on road</li>
+                  <li className="flex items-center gap-2"><span className="text-emerald-500 font-bold">✓</span> Animal carcass or medical waste</li>
+                  <li className="flex items-center gap-2"><span className="text-red-400 font-bold">✗</span> Screenshots, documents, or selfies</li>
+                </ul>
+              </div>
+
+              {/* Action buttons */}
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  onClick={() => {
+                    resetForm();
+                    setTimeout(() => cameraInputRef.current?.click(), 100);
+                  }}
+                  className="flex flex-col items-center justify-center gap-1.5 bg-emerald-600 text-white font-semibold py-4 rounded-xl hover:bg-emerald-700 active:scale-95 transition-all"
+                >
+                  <Camera className="h-6 w-6" />
+                  <span className="text-sm">Open Camera</span>
+                </button>
+                <button
+                  onClick={() => {
+                    resetForm();
+                    setTimeout(() => fileInputRef.current?.click(), 100);
+                  }}
+                  className="flex flex-col items-center justify-center gap-1.5 bg-white text-emerald-700 font-semibold py-4 rounded-xl border-2 border-emerald-600 hover:bg-emerald-50 active:scale-95 transition-all"
+                >
+                  <Upload className="h-6 w-6" />
+                  <span className="text-sm">Upload Photo</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* ==================== STEP 3: REVIEW ==================== */}
-        {step === 'review' && (
+        {step === 'review' && !isSpamRejected && (
           <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
             <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
               <CheckCircle className="h-5 w-5 text-emerald-600" />
