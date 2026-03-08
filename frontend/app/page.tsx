@@ -46,7 +46,7 @@ const features = [
 ];
 
 const stats = [
-  { value: '94.6%', label: 'AI Accuracy' },
+  { value: '84.6%', label: 'AI Accuracy' },
   { value: '6.4h', label: 'Avg Resolution' },
   { value: '24', label: 'Wards Covered' },
   { value: '4.2★', label: 'Citizen Rating' },
