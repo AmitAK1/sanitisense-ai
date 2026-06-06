@@ -8,6 +8,8 @@ A Civic Operating System that transforms urban sanitation management through AI-
 [![Student Track](https://img.shields.io/badge/Track-AI%20for%20Communities-blue)](https://aws.amazon.com)
 [![Team](https://img.shields.io/badge/Team-Swadeshi%20Coders-green)](https://github.com)
 
+**Live Demo:** https://main.d18a1q87hofbl9.amplifyapp.com/
+
 ---
 
 ## 📋 Table of Contents
